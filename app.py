@@ -1,7 +1,6 @@
 import hashlib
 import io
 import json
-import os
 import re
 from textwrap import dedent
 
@@ -39,6 +38,14 @@ def initialize_state() -> None:
 
 def active_workspace() -> dict:
     return st.session_state["workspaces"][st.session_state["active_workspace"]]
+
+
+def get_gemini_client() -> genai.Client:
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception as exc:
+        raise RuntimeError("Backend Gemini authentication is not configured.") from exc
+    return genai.Client(api_key=api_key)
 
 
 def apply_theme() -> None:
@@ -287,17 +294,14 @@ def extract_pptx(file_bytes: bytes) -> tuple[str, list[dict], int]:
     return "\n\n".join(slides), images, len(deck.slides)
 
 
-def analyze_image(api_key: str, image_bytes: bytes, mime_type: str) -> tuple[str, bool]:
+def analyze_image(image_bytes: bytes, mime_type: str) -> tuple[str, bool]:
     try:
         validated_bytes, validated_mime = validate_image(image_bytes, mime_type)
     except ValueError:
         return "Visual analysis failed for this slide, but text was processed successfully.", False
 
-    if not api_key:
-        return "", True
-
     try:
-        client = genai.Client(api_key=api_key)
+        client = get_gemini_client()
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=[
@@ -310,7 +314,7 @@ def analyze_image(api_key: str, image_bytes: bytes, mime_type: str) -> tuple[str
         return "Visual analysis failed for this slide, but text was processed successfully.", False
 
 
-def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[str]]:
+def parse_uploaded_file(uploaded_file) -> tuple[dict, int, list[str]]:
     file_bytes = uploaded_file.getvalue()
     file_name = uploaded_file.name
     file_type = file_name.rsplit(".", 1)[-1].lower()
@@ -325,7 +329,7 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[st
         raw_text, images, indexed_units = extract_pptx(file_bytes)
     elif file_type in {"jpg", "jpeg", "png"}:
         mime_type = image_mime_from_ext(file_type)
-        visual_text, ok = analyze_image(api_key, file_bytes, mime_type)
+        visual_text, ok = analyze_image(file_bytes, mime_type)
         raw_text = f"## Visual Slide: {file_name}\n\n{visual_text}" if visual_text and ok else ""
         if ok:
             try:
@@ -390,19 +394,13 @@ def add_textbook_content(workspace: dict, text: str, subject: str) -> int:
     return max(1, len(re.findall(r"^##\s+", cleaned, flags=re.M)))
 
 
-def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: str, api_key: str) -> None:
+def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: str) -> None:
     indexed_units = 0
     warnings = []
     known_ids = {file_item["id"] for file_item in workspace["files"]}
 
-    image_uploads = [
-        item for item in uploaded_files or [] if item.name.rsplit(".", 1)[-1].lower() in {"jpg", "jpeg", "png"}
-    ]
-    if image_uploads and not api_key:
-        st.warning("⚙ Setup Required")
-
     for uploaded_file in uploaded_files or []:
-        file_item, units, file_warnings = parse_uploaded_file(uploaded_file, api_key)
+        file_item, units, file_warnings = parse_uploaded_file(uploaded_file)
         if file_item["id"] not in known_ids:
             workspace["files"].append(file_item)
             known_ids.add(file_item["id"])
@@ -436,10 +434,10 @@ def workspace_image_parts(workspace: dict) -> list[types.Part]:
     return parts
 
 
-def call_gemini(api_key: str, prompt: str, workspace: dict) -> str:
+def call_gemini(prompt: str, workspace: dict) -> str:
     image_parts = workspace_image_parts(workspace)
     try:
-        client = genai.Client(api_key=api_key)
+        client = get_gemini_client()
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=[prompt, *image_parts],
@@ -450,7 +448,7 @@ def call_gemini(api_key: str, prompt: str, workspace: dict) -> str:
             workspace["visual_warnings"].append(
                 "Visual analysis failed for this slide, but text was processed successfully."
             )
-            client = genai.Client(api_key=api_key)
+            client = get_gemini_client()
             response = client.models.generate_content(model=GEMINI_MODEL, contents=[prompt])
             return response.text or ""
         raise RuntimeError(f"Gemini request failed: {exc}") from exc
@@ -585,7 +583,7 @@ def workspace_summary(workspace: dict) -> None:
     )
 
 
-def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
+def render_ingest_tab(subject: str, workspace: dict) -> None:
     subjects = list(st.session_state["workspaces"].keys())
     selected_subject = st.selectbox(
         "Subject Workspace",
@@ -615,23 +613,21 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         )
 
     if st.button("Index Materials", type="primary"):
-        index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
+        index_materials(uploaded_files, pasted_text, workspace, subject)
 
     workspace_summary(workspace)
     for warning in sorted(set(workspace["visual_warnings"])):
         st.warning(warning)
 
 
-def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> None:
+def render_study_tab(subject: str, workspace: dict, mode: str) -> None:
     if st.button("Generate Physics Method Guide", type="primary"):
-        if not api_key:
-            st.warning("⚙ Setup Required")
-        elif not workspace["files"]:
+        if not workspace["files"]:
             st.warning("Add material in the Ingest Material tab first.")
         else:
             with st.spinner("Building study guide..."):
                 try:
-                    workspace["generated_notes"] = call_gemini(api_key, guide_prompt(subject, workspace, mode), workspace)
+                    workspace["generated_notes"] = call_gemini(guide_prompt(subject, workspace, mode), workspace)
                 except Exception as exc:
                     st.error(str(exc))
 
@@ -648,21 +644,19 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
         st.caption("Generate a Physics Method guide after indexing material.")
 
 
-def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
+def render_quiz_tab(subject: str, workspace: dict) -> None:
     quiz_key = f"quiz_{subject}"
     answer_key = f"answers_{subject}"
     st.session_state.setdefault(quiz_key, [])
     st.session_state.setdefault(answer_key, {})
 
     if st.button("Generate Quiz", type="primary"):
-        if not api_key:
-            st.warning("⚙ Setup Required")
-        elif not workspace["files"]:
+        if not workspace["files"]:
             st.warning("Add material in the Ingest Material tab first.")
         else:
             with st.spinner("Generating quiz..."):
                 try:
-                    response_text = call_gemini(api_key, quiz_prompt(subject, workspace), workspace)
+                    response_text = call_gemini(quiz_prompt(subject, workspace), workspace)
                     st.session_state[quiz_key] = parse_json_response(response_text).get("questions", [])[:5]
                     st.session_state[answer_key] = {}
                 except Exception as exc:
@@ -708,7 +702,7 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
         st.success(f"Quiz saved: {score}%")
 
 
-def render_workspace_sidebar() -> tuple[str, str, str]:
+def render_workspace_sidebar() -> tuple[str, str]:
     with st.sidebar:
         st.header("Workspace")
         new_subject = st.text_input("New Subject Name", placeholder="CSE 230, Physics, MAT 243")
@@ -735,13 +729,9 @@ def render_workspace_sidebar() -> tuple[str, str, str]:
                 st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
                 st.rerun()
 
-        st.divider()
-        with st.expander("⚙ Settings"):
-            api_key = st.text_input("Gemini Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
-            st.caption(f"Model: `{GEMINI_MODEL}`")
         study_mode = st.radio("Study Mode", ["Deep Dive", "Cram Mode"])
 
-    return selected, api_key, study_mode
+    return selected, study_mode
 
 
 def main() -> None:
@@ -749,7 +739,7 @@ def main() -> None:
     initialize_state()
     apply_theme()
 
-    subject, api_key, study_mode = render_workspace_sidebar()
+    subject, study_mode = render_workspace_sidebar()
     workspace = active_workspace()
 
     st.title(APP_TITLE)
@@ -759,11 +749,11 @@ def main() -> None:
     ingest_tab, guide_tab, quiz_tab = st.tabs(["Ingest Material", "Study Guide", "Interactive Quiz"])
 
     with ingest_tab:
-        render_ingest_tab(subject, workspace, api_key)
+        render_ingest_tab(subject, workspace)
     with guide_tab:
-        render_study_tab(api_key, subject, workspace, study_mode)
+        render_study_tab(subject, workspace, study_mode)
     with quiz_tab:
-        render_quiz_tab(api_key, subject, workspace)
+        render_quiz_tab(subject, workspace)
 
 
 if __name__ == "__main__":
