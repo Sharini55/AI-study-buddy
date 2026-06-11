@@ -1,52 +1,24 @@
 import hashlib
-import io
 import json
-import re
-from textwrap import dedent
-
-import fitz
+import os
 import streamlit as st
-from google import genai
-from google.genai import types
-from PIL import Image, UnidentifiedImageError
-from pptx import Presentation
+from sqlalchemy.orm import Session
 
+# Configuration & Subsystem Imports
+from utils.auth import init_auth_session_state, render_login_signup_ui, logout_user
+from utils.persistence import (
+    SessionLocal, User, Workspace, SourceFile, SourceImage, StudyGuide, QuizAttempt,
+    save_uploaded_image_locally, load_local_image_bytes
+)
+from utils.files import blank_workspace
+from utils.guide import render_guide
 
 APP_TITLE = "SunDevil AI"
-GEMINI_MODEL = "models/gemini-3.5-flash"
-SUPPORTED_UPLOADS = ["pdf", "pptx", "jpg", "jpeg", "png"]
-MAX_IMAGE_EDGE = 1024
-IMAGE_ANALYSIS_PROMPT = "This is a computer science slide. Transcribe the code and explain any diagrams."
 
 
-def blank_workspace() -> dict:
-    return {
-        "files": [],
-        "processed_text": "",
-        "quiz_history": [],
-        "generated_notes": "",
-        "weak_area_report": "",
-        "stats": {"slides": 0, "chapters": 0},
-        "visual_warnings": [],
-    }
-
-
-def initialize_state() -> None:
-    st.session_state.setdefault("workspaces", {"CSE 230": blank_workspace()})
-    st.session_state.setdefault("active_workspace", next(iter(st.session_state["workspaces"])))
-
-
-def active_workspace() -> dict:
-    return st.session_state["workspaces"][st.session_state["active_workspace"]]
-
-
-def get_gemini_client() -> genai.Client:
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except Exception as exc:
-        raise RuntimeError("Backend Gemini authentication is not configured.") from exc
-    return genai.Client(api_key=api_key)
-
+# ---------------------------------------------------------------------------
+# Theme — only static, hardcoded CSS uses unsafe_allow_html
+# ---------------------------------------------------------------------------
 
 def apply_theme() -> None:
     st.markdown(
@@ -64,25 +36,14 @@ def apply_theme() -> None:
             --gold-dark: #B8942F;
         }
 
-        .stApp {
-            background: var(--bg);
-            color: var(--ink);
-        }
-
-        .main .block-container {
-            max-width: 1360px;
-            padding-top: 2rem;
-        }
+        .stApp { background: var(--bg); color: var(--ink); }
+        .main .block-container { max-width: 1360px; padding-top: 2rem; }
 
         [data-testid="stSidebar"] {
             background: var(--sidebar);
             border-right: 1px solid var(--line);
         }
-
-        [data-testid="stSidebar"] * {
-            color: var(--ink);
-            letter-spacing: 0;
-        }
+        [data-testid="stSidebar"] * { color: var(--ink); letter-spacing: 0; }
 
         [data-testid="stSidebar"] .stButton > button {
             background: #8C1D40 !important;
@@ -91,13 +52,9 @@ def apply_theme() -> None:
             border-radius: 999px !important;
             font-weight: 700 !important;
         }
-
         [data-testid="stSidebar"] .stButton > button *,
         [data-testid="stSidebar"] .stButton > button p,
-        [data-testid="stSidebar"] .stButton > button span {
-            color: #FFFFFF !important;
-        }
-
+        [data-testid="stSidebar"] .stButton > button span { color: #FFFFFF !important; }
         [data-testid="stSidebar"] .stButton > button:hover,
         [data-testid="stSidebar"] .stButton > button:focus {
             background: #741634 !important;
@@ -105,17 +62,13 @@ def apply_theme() -> None:
             color: #FFFFFF !important;
         }
 
-        h1, h2, h3, p, label, span {
-            color: var(--ink);
-            letter-spacing: 0;
-        }
+        h1, h2, h3, p, label, span { color: var(--ink); letter-spacing: 0; }
 
         div[data-testid="stTabs"] button[role="tab"] {
             border-radius: 999px;
             padding: 10px 16px;
             color: var(--ink);
         }
-
         div[data-testid="stTabs"] button[aria-selected="true"] {
             background: #FFFFFF;
             border: 1px solid var(--line);
@@ -124,37 +77,86 @@ def apply_theme() -> None:
         .stButton > button,
         .stDownloadButton > button {
             border-radius: 999px;
-            border: 1px solid var(--line);
-            color: var(--ink) !important;
+            border: 1.5px solid var(--line);
+            background: #FFFFFF !important;
+            color: #2D2D2D !important;
             font-weight: 650;
         }
-
-        .stButton > button[kind="primary"],
-        .stDownloadButton > button {
-            background: var(--gold);
-            border-color: var(--gold);
-            color: #2D2D2D !important;
-            font-weight: 700;
-        }
-
         .stButton > button *,
         .stButton > button p,
         .stButton > button span,
         .stDownloadButton > button *,
         .stDownloadButton > button p,
         .stDownloadButton > button span {
-            color: inherit !important;
+            color: #2D2D2D !important;
         }
-
-        .stButton > button[kind="primary"]:hover,
+        .stButton > button:hover,
         .stDownloadButton > button:hover {
-            background: var(--gold-dark);
-            border-color: var(--gold-dark);
+            background: #F5F0E8 !important;
+            border-color: #C4B89A !important;
             color: #2D2D2D !important;
         }
 
-        input,
-        textarea,
+        .stButton > button[kind="primary"],
+        .stDownloadButton > button {
+            background: var(--gold) !important;
+            border-color: var(--gold) !important;
+            color: #2D2D2D !important;
+            font-weight: 700;
+        }
+        .stButton > button[kind="primary"] *,
+        .stButton > button[kind="primary"] p,
+        .stButton > button[kind="primary"] span,
+        .stDownloadButton > button *,
+        .stDownloadButton > button p,
+        .stDownloadButton > button span {
+            color: #2D2D2D !important;
+        }
+        .stButton > button[kind="primary"]:hover,
+        .stDownloadButton > button:hover {
+            background: var(--gold-dark) !important;
+            border-color: var(--gold-dark) !important;
+            color: #2D2D2D !important;
+        }
+
+        /* ── File uploader — force light theme throughout ── */
+        [data-testid="stFileUploader"] {
+            background: #FFFFFF !important;
+            border: 2px dashed #C4B89A !important;
+            border-radius: 14px !important;
+        }
+        [data-testid="stFileUploaderDropzone"] {
+            background: #FFFFFF !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] span,
+        [data-testid="stFileUploaderDropzoneInstructions"] small,
+        [data-testid="stFileUploaderDropzoneInstructions"] p,
+        [data-testid="stFileUploader"] small,
+        [data-testid="stFileUploader"] span {
+            color: #2D2D2D !important;
+        }
+        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] {
+            background: #8C1D40 !important;
+            border: 1.5px solid #8C1D40 !important;
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+            border-radius: 999px !important;
+        }
+        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] span,
+        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p {
+            color: #FFFFFF !important;
+        }
+
+        /* ── Username badge in sidebar — readable dark text on light bg ── */
+        [data-testid="stSidebar"] code {
+            background: #E7DECF !important;
+            color: #2D2D2D !important;
+            border-radius: 6px !important;
+            padding: 2px 8px !important;
+            font-weight: 700 !important;
+        }
+
+        div[data-testid="stAlert"] { border-radius: 14px; color: var(--ink); }
         div[data-baseweb="input"] input,
         div[data-baseweb="textarea"] textarea,
         [data-testid="stTextInput"] input,
@@ -163,7 +165,6 @@ def apply_theme() -> None:
             caret-color: #2D2D2D !important;
             background: #FFFFFF !important;
         }
-
         input::placeholder,
         textarea::placeholder,
         [data-testid="stTextInput"] input::placeholder,
@@ -179,538 +180,182 @@ def apply_theme() -> None:
             background: var(--panel);
             border-radius: 14px;
         }
-
         div[data-testid="stTextArea"] textarea {
             border: 2px solid var(--rose);
             border-radius: 14px;
             background: #FFFFFF;
             color: var(--ink);
         }
-
-        div[data-testid="stAlert"] {
-            border-radius: 14px;
-            color: var(--ink);
-        }
-
-        .workspace-card {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 18px 20px;
-            margin: 10px 0 18px 0;
-        }
-
-        .workspace-card small {
-            color: var(--muted);
-        }
+        div[data-testid="stAlert"] { border-radius: 14px; color: var(--ink); }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 
-def clean_to_markdown(raw_text: str) -> str:
-    if not raw_text:
-        return ""
+# ---------------------------------------------------------------------------
+# DATA SYNCING: Read/Write Streamlit Workspaces dynamically to SQLite
+# ---------------------------------------------------------------------------
 
-    text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r" *\n *", "\n", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            lines.append("")
-            continue
-
-        is_heading = (
-            len(stripped) <= 90
-            and len(stripped.split()) <= 12
-            and not stripped.endswith((".", ",", ";"))
-            and re.match(r"^(chapter|section|module|week|slide|\d+(\.\d+)*)\b", stripped, re.I)
-        )
-        lines.append(f"## {stripped}" if is_heading else stripped)
-
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
-
-
-def extract_pdf_text(file_bytes: bytes) -> tuple[str, int]:
-    with fitz.open(stream=file_bytes, filetype="pdf") as doc:
-        return "\n\n".join(page.get_text("text") for page in doc), doc.page_count
-
-
-def image_mime_from_ext(ext: str) -> str:
-    return "image/jpeg" if ext.lower().lstrip(".") in {"jpg", "jpeg"} else "image/png"
-
-
-def validate_image(image_bytes: bytes, mime_type: str) -> tuple[bytes, str]:
+def load_user_workspaces_from_db(username: str) -> dict:
+    """Queries SQLite and marshals database rows back into Streamlit workspace dictionary."""
+    db: Session = SessionLocal()
+    workspaces_dict = {}
     try:
-        with Image.open(io.BytesIO(image_bytes)) as image:
-            image.load()
-            image.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE))
+        user_record = db.query(User).filter(User.username == username).first()
+        if user_record:
+            for ws in user_record.workspaces:
+                ws_data = blank_workspace()
+                ws_data["id"] = ws.id
+                
+                # Load indexed files
+                for file_row in ws.files:
+                    images_list = []
+                    for img_row in file_row.images:
+                        img_bytes = load_local_image_bytes(img_row.storage_path)
+                        images_list.append({
+                            "label": img_row.label,
+                            "bytes": img_bytes,
+                            "mime_type": img_row.mime_type
+                        })
+                    
+                    ws_data["files"].append({
+                        "id": file_row.id,
+                        "name": file_row.name,
+                        "type": file_row.file_type,
+                        "content": file_row.content_text,
+                        "images": images_list
+                    })
+                
+                # Consolidate processed text
+                chunks = [f"# Source: {f['name']}\n\n{f['content']}" for f in ws_data["files"] if f["content"]]
+                ws_data["processed_text"] = "\n\n---\n\n".join(chunks).strip()
+                ws_data["stats"]["slides"] = len(ws_data["files"])
+                ws_data["stats"]["chapters"] = sum(f["content"].count("## ") for f in ws_data["files"])
+                
+                # Load latest study guide
+                latest_guide = db.query(StudyGuide).filter(StudyGuide.workspace_id == ws.id).order_by(StudyGuide.created_at.desc()).first()
+                if latest_guide:
+                    ws_data["generated_notes"] = latest_guide.content_md
+                
+                # Load quiz historical entries
+                for quiz_row in ws.quizzes:
+                    try:
+                        ws_data["quiz_history"].append({
+                            "score": quiz_row.score,
+                            "questions": json.loads(quiz_row.quiz_json),
+                            "answers": json.loads(quiz_row.answers_json)
+                        })
+                    except Exception:
+                        continue
+                        
+                workspaces_dict[ws.subject_name] = ws_data
+    finally:
+        db.close()
+    return workspaces_dict
 
-            if image.mode not in {"RGB", "RGBA"}:
-                image = image.convert("RGB")
 
-            output = io.BytesIO()
-            if image.mode == "RGBA" and mime_type == "image/png":
-                image.save(output, format="PNG", optimize=True)
-                return output.getvalue(), "image/png"
-
-            image = image.convert("RGB")
-            image.save(output, format="JPEG", quality=85, optimize=True)
-            return output.getvalue(), "image/jpeg"
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise ValueError("Visual analysis failed for this slide, but text was processed successfully.") from exc
-
-
-def extract_pptx(file_bytes: bytes) -> tuple[str, list[dict], int]:
-    deck = Presentation(io.BytesIO(file_bytes))
-    slides = []
-    images = []
-
-    for slide_number, slide in enumerate(deck.slides, start=1):
-        slide_text = [f"## Slide {slide_number}"]
-        for shape_index, shape in enumerate(slide.shapes, start=1):
-            if hasattr(shape, "text") and shape.text.strip():
-                slide_text.append(shape.text.strip())
-            if hasattr(shape, "image"):
-                image = shape.image
-                try:
-                    image_bytes, mime_type = validate_image(image.blob, image_mime_from_ext(image.ext))
-                    images.append(
-                        {
-                            "label": f"Slide {slide_number} image {shape_index}",
-                            "bytes": image_bytes,
-                            "mime_type": mime_type,
-                        }
-                    )
-                except ValueError:
-                    continue
-        slides.append("\n\n".join(slide_text))
-
-    return "\n\n".join(slides), images, len(deck.slides)
-
-
-def analyze_image(image_bytes: bytes, mime_type: str) -> tuple[str, bool]:
+def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dict):
+    """Commits active memory modifications (guides, scores, uploads) back to SQLite tables."""
+    db: Session = SessionLocal()
     try:
-        validated_bytes, validated_mime = validate_image(image_bytes, mime_type)
-    except ValueError:
-        return "Visual analysis failed for this slide, but text was processed successfully.", False
-
-    try:
-        client = get_gemini_client()
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=[
-                IMAGE_ANALYSIS_PROMPT,
-                types.Part.from_bytes(data=validated_bytes, mime_type=validated_mime),
-            ],
-        )
-        return response.text or "", True
-    except Exception:
-        return "Visual analysis failed for this slide, but text was processed successfully.", False
-
-
-def parse_uploaded_file(uploaded_file) -> tuple[dict, int, list[str]]:
-    file_bytes = uploaded_file.getvalue()
-    file_name = uploaded_file.name
-    file_type = file_name.rsplit(".", 1)[-1].lower()
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
-    warnings = []
-    indexed_units = 1
-    images = []
-
-    if file_type == "pdf":
-        raw_text, indexed_units = extract_pdf_text(file_bytes)
-    elif file_type == "pptx":
-        raw_text, images, indexed_units = extract_pptx(file_bytes)
-    elif file_type in {"jpg", "jpeg", "png"}:
-        mime_type = image_mime_from_ext(file_type)
-        visual_text, ok = analyze_image(file_bytes, mime_type)
-        raw_text = f"## Visual Slide: {file_name}\n\n{visual_text}" if visual_text and ok else ""
-        if ok:
-            try:
-                valid_bytes, valid_mime = validate_image(file_bytes, mime_type)
-                images = [{"label": file_name, "bytes": valid_bytes, "mime_type": valid_mime}]
-            except ValueError:
-                pass
-        else:
-            warnings.append("Visual analysis failed for this slide, but text was processed successfully.")
-    else:
-        raw_text = ""
-
-    return (
-        {
-            "id": f"{file_name}:{file_hash}",
-            "name": file_name,
-            "type": file_type,
-            "size": len(file_bytes),
-            "hash": file_hash,
-            "content": clean_to_markdown(raw_text),
-            "images": images,
-        },
-        indexed_units,
-        warnings,
-    )
-
-
-def refresh_processed_text(workspace: dict) -> None:
-    chunks = []
-    chapter_count = 0
-    for file_item in workspace["files"]:
-        if file_item["content"]:
-            chunks.append(f"# Source: {file_item['name']}\n\n{file_item['content']}")
-            chapter_count += len(re.findall(r"^##\s+", file_item["content"], flags=re.M))
-
-    workspace["processed_text"] = "\n\n---\n\n".join(chunks).strip()
-    workspace["stats"]["chapters"] = chapter_count
-
-
-def add_textbook_content(workspace: dict, text: str, subject: str) -> int:
-    cleaned = clean_to_markdown(text)
-    if not cleaned:
-        return 0
-
-    text_hash = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
-    source_id = f"pasted-text:{text_hash}"
-    if any(file_item["id"] == source_id for file_item in workspace["files"]):
-        return 0
-
-    workspace["files"].append(
-        {
-            "id": source_id,
-            "name": f"{subject} pasted content",
-            "type": "text",
-            "size": len(cleaned),
-            "hash": text_hash,
-            "content": f"## Pasted Textbook Content\n\n{cleaned}",
-            "images": [],
-        }
-    )
-    refresh_processed_text(workspace)
-    return max(1, len(re.findall(r"^##\s+", cleaned, flags=re.M)))
-
-
-def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: str) -> None:
-    indexed_units = 0
-    warnings = []
-    known_ids = {file_item["id"] for file_item in workspace["files"]}
-
-    for uploaded_file in uploaded_files or []:
-        file_item, units, file_warnings = parse_uploaded_file(uploaded_file)
-        if file_item["id"] not in known_ids:
-            workspace["files"].append(file_item)
-            known_ids.add(file_item["id"])
-            indexed_units += units
-        warnings.extend(file_warnings)
-
-    indexed_units += add_textbook_content(workspace, pasted_text, subject)
-    workspace["stats"]["slides"] += indexed_units
-    refresh_processed_text(workspace)
-
-    if indexed_units:
-        st.toast(f"Workspace Loaded: {workspace['stats']['slides']} Slides, {workspace['stats']['chapters']} Chapters")
-    elif uploaded_files or pasted_text.strip():
-        st.caption("Workspace already has this material indexed.")
-
-    for warning in sorted(set(warnings)):
-        st.warning(warning)
-
-
-def workspace_image_parts(workspace: dict) -> list[types.Part]:
-    parts = []
-    for file_item in workspace["files"]:
-        for image in file_item["images"]:
-            try:
-                image_bytes, mime_type = validate_image(image["bytes"], image["mime_type"])
-                parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-            except ValueError:
-                workspace["visual_warnings"].append(
-                    "Visual analysis failed for this slide, but text was processed successfully."
+        ws_row = db.query(Workspace).filter(Workspace.user_id == username, Workspace.subject_name == subject_name).first()
+        if not ws_row:
+            ws_row = Workspace(user_id=username, subject_name=subject_name)
+            db.add(ws_row)
+            db.commit()
+            db.refresh(ws_row)
+            
+        ws_memory["id"] = ws_row.id
+        
+        # Sync files
+        for file_item in ws_memory.get("files", []):
+            existing_file = db.query(SourceFile).filter(SourceFile.workspace_id == ws_row.id, SourceFile.name == file_item["name"]).first()
+            if not existing_file:
+                content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
+                
+                new_file = SourceFile(
+                    workspace_id=ws_row.id,
+                    name=file_item["name"],
+                    file_type=file_item["type"],
+                    content_text=file_item["content"],
+                    file_hash=content_hash
                 )
-    return parts
-
-
-def call_gemini(prompt: str, workspace: dict) -> str:
-    image_parts = workspace_image_parts(workspace)
-    try:
-        client = get_gemini_client()
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=[prompt, *image_parts],
-        )
-        return response.text or ""
-    except Exception as exc:
-        if image_parts:
-            workspace["visual_warnings"].append(
-                "Visual analysis failed for this slide, but text was processed successfully."
-            )
-            client = get_gemini_client()
-            response = client.models.generate_content(model=GEMINI_MODEL, contents=[prompt])
-            return response.text or ""
-        raise RuntimeError(f"Gemini request failed: {exc}") from exc
-
-
-def guide_prompt(subject: str, workspace: dict, mode: str) -> str:
-    visual_instruction = ""
-    if workspace_image_parts(workspace):
-        visual_instruction = (
-            "Attached images may include computer science slides, code screenshots, diagrams, stack/heap layouts, "
-            "or memory traces. Explain the visual material where it supports the topic."
-        )
-
-    mode_instruction = (
-        "Go deep on theory, edge cases, implementation tradeoffs, and memory/performance implications."
-        if mode == "Deep Dive"
-        else "Prioritize high-yield exam facts, syntax patterns, common pitfalls, and fast recall."
-    )
-
-    return dedent(
-        f"""
-        You are a PhD Teaching Assistant for ASU Computer Science.
-        Subject workspace: {subject}
-        {mode_instruction}
-        {visual_instruction}
-
-        Generate a Physics Method study guide using ONLY this workspace's materials.
-        For every major topic, output exactly:
-
-        ## [Topic Name]
-        **THE RULE**: Explain the core rule, why it works, and memory/performance implications.
-        **THE GUIDED SOLVE**: Provide a code or logic block with line-by-line documentation.
-        **THE CHALLENGE**: Provide a practice problem that tests transfer and edge cases.
-        **[ANSWER]**: Provide the complete worked answer and reasoning.
-
-        Workspace materials:
-        {workspace["processed_text"] if workspace["processed_text"] else "No text was extracted. Use attached images."}
-        """
-    ).strip()
-
-
-def quiz_prompt(subject: str, workspace: dict) -> str:
-    return dedent(
-        f"""
-        You are a PhD Teaching Assistant for ASU Computer Science.
-        Subject workspace: {subject}
-        Generate exactly 5 multiple-choice quiz questions using ONLY this workspace's materials.
-        Use attached visuals when relevant.
-
-        Return strict JSON only. No Markdown fences.
-        Format:
-        {{
-          "questions": [
-            {{
-              "question": "Question text",
-              "choices": ["A", "B", "C", "D"],
-              "answer_index": 0,
-              "topic": "Topic name",
-              "explanation": "Why the correct answer is right"
-            }}
-          ]
-        }}
-
-        Workspace materials:
-        {workspace["processed_text"] if workspace["processed_text"] else "No text was extracted. Use attached images."}
-        """
-    ).strip()
-
-
-def parse_json_response(text: str) -> dict:
-    cleaned = text.strip()
-    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-    cleaned = re.sub(r"\s*```$", "", cleaned)
-    return json.loads(cleaned)
-
-
-def split_topics(markdown: str) -> list[dict[str, str]]:
-    topics = []
-    current_title = ""
-    current_lines = []
-
-    for line in markdown.splitlines():
-        heading = re.match(r"^##\s+(.+?)\s*$", line)
-        if heading:
-            if current_title:
-                topics.append(topic_from_lines(current_title, current_lines))
-            current_title = heading.group(1).strip()
-            current_lines = []
-        elif current_title:
-            current_lines.append(line)
-
-    if current_title:
-        topics.append(topic_from_lines(current_title, current_lines))
-
-    return topics
-
-
-def topic_from_lines(title: str, lines: list[str]) -> dict[str, str]:
-    body = "\n".join(lines).strip()
-    answer_match = re.search(r"\*\*\[ANSWER\]\*\*\s*:\s*", body)
-    if not answer_match:
-        return {"title": title, "body": body, "answer": "_No answer section returned._"}
-    return {
-        "title": title,
-        "body": body[: answer_match.start()].strip(),
-        "answer": body[answer_match.end() :].strip(),
-    }
-
-
-def render_guide(markdown: str) -> None:
-    topics = split_topics(markdown)
-    if not topics:
-        st.markdown(markdown)
-        return
-
-    for topic in topics:
-        st.subheader(topic["title"])
-        st.markdown(topic["body"])
-        with st.expander("Click to see answer"):
-            st.markdown(topic["answer"])
-
-
-def workspace_summary(workspace: dict) -> None:
-    st.markdown(
-        f"""
-        <div class="workspace-card">
-          <strong>Workspace Loaded:</strong> {workspace["stats"]["slides"]} Slides, {workspace["stats"]["chapters"]} Chapters
-          <br><small>{len(workspace["files"])} indexed source(s)</small>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_ingest_tab(subject: str, workspace: dict) -> None:
-    subjects = list(st.session_state["workspaces"].keys())
-    selected_subject = st.selectbox(
-        "Subject Workspace",
-        subjects,
-        index=subjects.index(subject),
-        key="ingest_subject_selector",
-    )
-    if selected_subject != subject:
-        st.session_state["active_workspace"] = selected_subject
-        st.rerun()
-
-    left, right = st.columns([1, 1], gap="large")
-    with left:
-        uploaded_files = st.file_uploader(
-            "Upload source files",
-            type=SUPPORTED_UPLOADS,
-            accept_multiple_files=True,
-            key=f"uploader_{subject}",
-            help="Accepted: PDF, PPTX, JPG, PNG.",
-        )
-    with right:
-        pasted_text = st.text_area(
-            "Paste Text",
-            height=240,
-            placeholder="Paste Zybooks or textbook content for this subject...",
-            key=f"textbook_{subject}",
-        )
-
-    if st.button("Index Materials", type="primary"):
-        index_materials(uploaded_files, pasted_text, workspace, subject)
-
-    workspace_summary(workspace)
-    for warning in sorted(set(workspace["visual_warnings"])):
-        st.warning(warning)
-
-
-def render_study_tab(subject: str, workspace: dict, mode: str) -> None:
-    if st.button("Generate Physics Method Guide", type="primary"):
-        if not workspace["files"]:
-            st.warning("Add material in the Ingest Material tab first.")
-        else:
-            with st.spinner("Building study guide..."):
-                try:
-                    workspace["generated_notes"] = call_gemini(guide_prompt(subject, workspace, mode), workspace)
-                except Exception as exc:
-                    st.error(str(exc))
-
-    if workspace["generated_notes"]:
-        st.download_button(
-            "Download Study Guide",
-            data=workspace["generated_notes"],
-            file_name=f"{subject.lower().replace(' ', '_')}_study_guide.md",
-            mime="text/markdown",
-            type="primary",
-        )
-        render_guide(workspace["generated_notes"])
-    else:
-        st.caption("Generate a Physics Method guide after indexing material.")
-
-
-def render_quiz_tab(subject: str, workspace: dict) -> None:
-    quiz_key = f"quiz_{subject}"
-    answer_key = f"answers_{subject}"
-    st.session_state.setdefault(quiz_key, [])
-    st.session_state.setdefault(answer_key, {})
-
-    if st.button("Generate Quiz", type="primary"):
-        if not workspace["files"]:
-            st.warning("Add material in the Ingest Material tab first.")
-        else:
-            with st.spinner("Generating quiz..."):
-                try:
-                    response_text = call_gemini(quiz_prompt(subject, workspace), workspace)
-                    st.session_state[quiz_key] = parse_json_response(response_text).get("questions", [])[:5]
-                    st.session_state[answer_key] = {}
-                except Exception as exc:
-                    st.error(str(exc))
-
-    quiz = st.session_state[quiz_key]
-    if not quiz:
-        st.caption("Generate a quiz from the active workspace.")
-        return
-
-    for index, question in enumerate(quiz):
-        choices = question.get("choices", [])
-        st.markdown(f"**Q{index + 1}. {question.get('question', '')}**")
-        if not choices:
-            st.warning("This generated question did not include choices.")
-            continue
-        selected = st.radio(
-            "Choose one",
-            choices,
-            key=f"{subject}_answer_{index}",
-            label_visibility="collapsed",
-        )
-        st.session_state[answer_key][str(index)] = choices.index(selected)
-
-    if st.button("Submit Quiz", type="primary"):
-        correct = 0
-        missed = []
-        for index, question in enumerate(quiz):
-            if st.session_state[answer_key].get(str(index)) == question.get("answer_index"):
-                correct += 1
+                db.add(new_file)
+                db.commit()
+                db.refresh(new_file)
+                
+                for idx, img_item in enumerate(file_item.get("images", [])):
+                    storage_path = save_uploaded_image_locally(img_item["bytes"], content_hash, idx)
+                    new_img = SourceImage(
+                        source_file_id=new_file.id,
+                        label=img_item.get("label", f"Slide Image {idx}"),
+                        storage_path=storage_path,
+                        mime_type=img_item["mime_type"]
+                    )
+                    db.add(new_img)
+                db.commit()
+                
+        # Sync study guide markdown
+        if ws_memory.get("generated_notes"):
+            existing_guide = db.query(StudyGuide).filter(StudyGuide.workspace_id == ws_row.id).first()
+            if not existing_guide:
+                new_guide = StudyGuide(
+                    workspace_id=ws_row.id,
+                    title=f"{subject_name} Core Guide",
+                    content_md=ws_memory["generated_notes"]
+                )
+                db.add(new_guide)
             else:
-                missed.append(question)
+                existing_guide.content_md = ws_memory["generated_notes"]
+            db.commit()
+            
+        # Sync quiz history entries
+        stored_attempts_count = db.query(QuizAttempt).filter(QuizAttempt.workspace_id == ws_row.id).count()
+        memory_history = ws_memory.get("quiz_history", [])
+        if len(memory_history) > stored_attempts_count:
+            for attempt in memory_history[stored_attempts_count:]:
+                new_attempt = QuizAttempt(
+                    workspace_id=ws_row.id,
+                    score=attempt["score"],
+                    quiz_json=json.dumps(attempt.get("questions", [])),
+                    answers_json=json.dumps(attempt.get("answers", {}))
+                )
+                db.add(new_attempt)
+            db.commit()
+            
+    except Exception as e:
+        db.rollback()
+        st.error(f"Failed to sync workspace to database: {str(e)}")
+    finally:
+        db.close()
 
-        score = round((correct / len(quiz)) * 100) if quiz else 0
-        workspace["quiz_history"].append(
-            {
-                "score": score,
-                "questions": quiz,
-                "answers": dict(st.session_state[answer_key]),
-                "missed_questions": missed,
-            }
-        )
-        st.success(f"Quiz saved: {score}%")
 
+# ---------------------------------------------------------------------------
+# Sidebar View Block (Authentication-Aware)
+# ---------------------------------------------------------------------------
 
-def render_workspace_sidebar() -> tuple[str, str]:
+def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str, str, str]:
     with st.sidebar:
+        if is_admin:
+            in_admin = st.session_state.get("admin_view", False)
+            label = "← Back to Study" if in_admin else "🛠 Admin Dashboard"
+            if st.button(label, use_container_width=True):
+                st.session_state["admin_view"] = not in_admin
+                st.rerun()
+            st.divider()
+
+        st.markdown(f"🔬 **Student Profile:** `{username}`")
+        st.divider()
         st.header("Workspace")
+        
         new_subject = st.text_input("New Subject Name", placeholder="CSE 230, Physics, MAT 243")
         if st.button("Create Workspace", type="primary", use_container_width=True):
             subject = new_subject.strip()
             if subject:
                 st.session_state["workspaces"].setdefault(subject, blank_workspace())
                 st.session_state["active_workspace"] = subject
+                save_active_workspace_to_db(username, subject, st.session_state["workspaces"][subject])
                 st.rerun()
 
         subjects = list(st.session_state["workspaces"].keys())
@@ -718,7 +363,11 @@ def render_workspace_sidebar() -> tuple[str, str]:
         if active not in subjects:
             active = subjects[0]
 
-        selected = st.radio("Switch Workspace", subjects, index=subjects.index(active), key="workspace_selector")
+        selected = st.radio(
+            "Switch Workspace", subjects,
+            index=subjects.index(active),
+            key="workspace_selector",
+        )
         st.session_state["active_workspace"] = selected
 
         if st.button("Delete Workspace", type="primary", use_container_width=True):
@@ -729,31 +378,324 @@ def render_workspace_sidebar() -> tuple[str, str]:
                 st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
                 st.rerun()
 
+        st.divider()
+        with st.expander("⚙ Settings"):
+            api_key = st.text_input("Gemini API Key", value="", type="password",
+                                    placeholder="Paste your key here…")
+            from utils.gemini import GEMINI_MODEL
+            st.caption(f"Model: `{GEMINI_MODEL}`")
+
         study_mode = st.radio("Study Mode", ["Deep Dive", "Cram Mode"])
 
-    return selected, study_mode
+        # ── Saved Guides ──────────────────────────────────────────────────
+        saved = st.session_state.get("saved_guides", [])
+        if saved:
+            st.divider()
+            st.markdown("**📚 Saved Guides**")
+            for idx, guide in enumerate(saved):
+                col_btn, col_del = st.columns([5, 1])
+                with col_btn:
+                    btn_label = f"{guide['title']}  •  {guide['saved_at']}"
+                    if st.button(btn_label, key=f"open_guide_{idx}", use_container_width=True):
+                        st.session_state["viewing_guide"] = idx
+                        st.rerun()
+                with col_del:
+                    if st.button("✕", key=f"del_guide_{idx}", help="Remove"):
+                        st.session_state["saved_guides"].pop(idx)
+                        if st.session_state.get("viewing_guide") == idx:
+                            st.session_state["viewing_guide"] = None
+                        st.rerun()
+
+        st.divider()
+        col_profile, col_logout = st.columns(2)
+        with col_profile:
+            if st.button("👤 Profile", use_container_width=True):
+                st.session_state["viewing_profile"] = True
+                st.rerun()
+        with col_logout:
+            if st.button("Log Out 🚪", use_container_width=True):
+                logout_user()
+
+    return selected, api_key, study_mode
+
+
+# ---------------------------------------------------------------------------
+# Profile Settings page
+# ---------------------------------------------------------------------------
+
+def render_profile_page(current_user: str) -> None:
+    from utils.auth import delete_account
+    from utils.persistence import SessionLocal, Workspace, StudyGuide, QuizAttempt, SourceFile
+
+    if st.button("← Back to workspace"):
+        st.session_state["viewing_profile"] = False
+        st.rerun()
+
+    st.title("👤 Profile Settings")
+    st.caption(f"Logged in as **{current_user}**")
+    st.divider()
+
+    # ── Account stats ──────────────────────────────────────────────────────
+    db = SessionLocal()
+    try:
+        ws_count = len(st.session_state.get("workspaces", {}))
+        guide_count = sum(
+            1 for ws in st.session_state.get("workspaces", {}).values()
+            if ws.get("generated_notes")
+        )
+        quiz_count = sum(
+            len(ws.get("quiz_history", []))
+            for ws in st.session_state.get("workspaces", {}).values()
+        )
+    finally:
+        db.close()
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Workspaces", ws_count)
+    c2.metric("Guides Generated", guide_count)
+    c3.metric("Quizzes Taken", quiz_count)
+    st.divider()
+
+    # ── Change password ────────────────────────────────────────────────────
+    st.subheader("🔑 Change Password")
+    with st.form("change_password_form"):
+        current_pw = st.text_input("Current Password", type="password")
+        new_pw = st.text_input(
+            "New Password",
+            type="password",
+            placeholder="Min 8 chars · 1 number · 1 special character",
+        )
+        confirm_pw = st.text_input("Confirm New Password", type="password")
+        if st.form_submit_button("Update Password", use_container_width=True):
+            from utils.auth import _validate_password
+            from utils.persistence import verify_password, hash_password, SessionLocal, User
+            if not current_pw or not new_pw or not confirm_pw:
+                st.error("Please fill in all fields.")
+            elif new_pw != confirm_pw:
+                st.error("New passwords do not match.")
+            else:
+                ok, msg = _validate_password(new_pw)
+                if not ok:
+                    st.error(msg)
+                else:
+                    db2 = SessionLocal()
+                    try:
+                        user = db2.query(User).filter(User.username == current_user).first()
+                        if not verify_password(user.password_hash, current_pw):
+                            st.error("Current password is incorrect.")
+                        else:
+                            user.password_hash = hash_password(new_pw)
+                            db2.commit()
+                            st.success("Password updated successfully.")
+                    finally:
+                        db2.close()
+
+    st.divider()
+
+    # ── Danger zone ────────────────────────────────────────────────────────
+    st.subheader("⚠️ Danger Zone")
+    st.caption("These actions are permanent and cannot be undone.")
+
+    if not st.session_state.get("_confirm_delete_account"):
+        if st.button("🗑 Delete My Account", use_container_width=True):
+            st.session_state["_confirm_delete_account"] = True
+            st.rerun()
+    else:
+        st.error(
+            f"This will permanently delete your account **{current_user}** and ALL associated "
+            "workspaces, guides, and quiz history. Type your username to confirm."
+        )
+        typed = st.text_input("Type your username to confirm deletion")
+        col_yes, col_no = st.columns(2)
+        with col_yes:
+            if st.button("Permanently Delete Account", type="primary", use_container_width=True):
+                if typed.strip().lower() == current_user:
+                    success, msg = delete_account(current_user)
+                    if success:
+                        from utils.auth import logout_user
+                        logout_user()
+                    else:
+                        st.error(msg)
+                else:
+                    st.error("Username does not match.")
+        with col_no:
+            if st.button("Cancel", use_container_width=True):
+                st.session_state.pop("_confirm_delete_account", None)
+                st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Guide viewer page
+# ---------------------------------------------------------------------------
+
+def render_guide_viewer(guide: dict) -> None:
+    if st.button("← Back to workspace"):
+        st.session_state["viewing_guide"] = None
+        st.rerun()
+
+    st.title(guide["title"])
+    st.caption(f"Saved at {guide['saved_at']}")
+    st.download_button(
+        "⬇ Download (.md)",
+        data=guide["content"].encode("utf-8"),
+        file_name=f"{guide['title'].lower().replace(' ', '_').replace('—', '').replace(' ', '_')}.md",
+        mime="text/markdown",
+        type="primary",
+    )
+    st.divider()
+    render_guide(guide["content"])
+
+
+# ---------------------------------------------------------------------------
+# Admin Dashboard
+# ---------------------------------------------------------------------------
+
+def render_admin_dashboard(current_user: str) -> None:
+    from tabs.db_inspector import render_db_inspector_tab
+    from utils.metrics import _report_path, _METRICS_DIR
+    import pandas as pd
+
+    st.title("🛠 Admin Dashboard")
+    st.caption(f"Logged in as **{current_user}**")
+
+    admin_tab, metrics_tab, users_tab = st.tabs([
+        "🕵️ Database Inspector", "📊 User Metrics", "👥 Users"
+    ])
+
+    with admin_tab:
+        render_db_inspector_tab()
+
+    with metrics_tab:
+        st.subheader("Per-User Metrics")
+        if _METRICS_DIR.exists():
+            user_dirs = [d for d in _METRICS_DIR.iterdir() if d.is_dir()]
+            if not user_dirs:
+                st.info("No metrics recorded yet.")
+            else:
+                for user_dir in sorted(user_dirs):
+                    uname = user_dir.name
+                    report = _report_path(uname)
+                    with st.expander(f"📁 {uname}", expanded=False):
+                        if report.exists() and report.stat().st_size > 0:
+                            col1, col2 = st.columns([3, 1])
+                            with col1:
+                                st.caption(f"{report.stat().st_size // 1024 + 1} KB")
+                            with col2:
+                                st.download_button(
+                                    "⬇ Download",
+                                    data=report.read_bytes(),
+                                    file_name=f"{uname}_metrics.md",
+                                    mime="text/markdown",
+                                    key=f"dl_metrics_{uname}",
+                                )
+                            preview = report.read_text(encoding="utf-8")
+                            st.markdown(preview[:4000] + ("\n\n_— download for full report —_" if len(preview) > 4000 else ""))
+                        else:
+                            st.caption("No activity yet.")
+        else:
+            st.info("No metrics directory found.")
+
+    with users_tab:
+        from utils.persistence import SessionLocal, User
+        db = SessionLocal()
+        try:
+            users = db.query(User).all()
+            if users:
+                st.dataframe(
+                    pd.DataFrame([{
+                        "Username": u.username,
+                        "Workspaces": len(u.workspaces),
+                        "Registered": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "—",
+                    } for u in users]),
+                    use_container_width=True,
+                )
+            else:
+                st.info("No users yet.")
+        finally:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
+# Main Execution Entrypoint
+# ---------------------------------------------------------------------------
+
+ADMIN_USERNAME = "sharinik"   # ← the one account that sees admin dashboard
 
 
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=":books:", layout="wide")
-    initialize_state()
+    init_auth_session_state()
     apply_theme()
 
-    subject, study_mode = render_workspace_sidebar()
-    workspace = active_workspace()
+    # 1. Auth gate
+    if not st.session_state["authenticated"]:
+        render_login_signup_ui()
+        st.stop()
+
+    current_user = st.session_state["username"]
+    is_admin = (current_user == ADMIN_USERNAME)
+
+    # 2. Session state bootstrap
+    st.session_state.setdefault("saved_guides", [])
+    st.session_state.setdefault("viewing_guide", None)
+    st.session_state.setdefault("admin_view", False)
+    st.session_state.setdefault("viewing_profile", False)
+
+    # 3. Load workspaces from DB on first run
+    if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
+        loaded = load_user_workspaces_from_db(current_user)
+        if loaded:
+            st.session_state["workspaces"] = loaded
+            st.session_state["active_workspace"] = next(iter(loaded))
+        else:
+            st.session_state["workspaces"] = {"My First Workspace": blank_workspace()}
+            st.session_state["active_workspace"] = "My First Workspace"
+            save_active_workspace_to_db(current_user, "My First Workspace",
+                                        st.session_state["workspaces"]["My First Workspace"])
+
+    subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin)
+
+    # 4. Profile page
+    if st.session_state.get("viewing_profile"):
+        render_profile_page(current_user)
+        return
+
+    # 5. Admin dashboard
+    if is_admin and st.session_state.get("admin_view"):
+        render_admin_dashboard(current_user)
+        return
+
+    # 6. Saved guide viewer
+    viewing_idx = st.session_state.get("viewing_guide")
+    if viewing_idx is not None:
+        saved = st.session_state.get("saved_guides", [])
+        if 0 <= viewing_idx < len(saved):
+            render_guide_viewer(saved[viewing_idx])
+            return
+        st.session_state["viewing_guide"] = None
+
+    # 7. Main workspace UI
+    workspace = st.session_state["workspaces"][subject]
 
     st.title(APP_TITLE)
-    st.caption("Warm, focused study workspaces for ASU computer science courses.")
+    st.caption("Warm, focused study workspaces for every course and major.")
     st.subheader(subject)
+
+    from tabs.ingest import render_ingest_tab
+    from tabs.study import render_study_tab
+    from tabs.quiz import render_quiz_tab
 
     ingest_tab, guide_tab, quiz_tab = st.tabs(["Ingest Material", "Study Guide", "Interactive Quiz"])
 
     with ingest_tab:
-        render_ingest_tab(subject, workspace)
+        render_ingest_tab(subject, workspace, api_key)
+        save_active_workspace_to_db(current_user, subject, workspace)
     with guide_tab:
-        render_study_tab(subject, workspace, study_mode)
+        render_study_tab(api_key, subject, workspace, study_mode)
+        save_active_workspace_to_db(current_user, subject, workspace)
     with quiz_tab:
-        render_quiz_tab(subject, workspace)
+        render_quiz_tab(api_key, subject, workspace)
+        save_active_workspace_to_db(current_user, subject, workspace)
 
 
 if __name__ == "__main__":
