@@ -1,4 +1,6 @@
+import datetime
 import hashlib
+import logging
 import time
 
 import streamlit as st
@@ -6,6 +8,8 @@ import streamlit as st
 from utils.gemini import call_gemini
 from utils.guide import guide_prompt, render_guide
 from utils.metrics import report_generation_metrics
+
+logger = logging.getLogger(__name__)
 
 _PROGRESS_STEPS = [
     (0.05, "Reading your materials…"),
@@ -18,14 +22,11 @@ _PROGRESS_STEPS = [
 
 
 def _save_guide(subject: str, content: str, label: str = "Study Guide") -> None:
-    import datetime
-    guide_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
-    existing_hashes = {
-        hashlib.sha256(g["content"].encode("utf-8")).hexdigest()[:12]
-        for g in st.session_state.get("saved_guides", [])
-    }
-    if guide_hash not in existing_hashes:
+    guide_id = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+    existing_ids = {g["id"] for g in st.session_state.get("saved_guides", [])}
+    if guide_id not in existing_ids:
         st.session_state["saved_guides"].append({
+            "id": guide_id,
             "title": f"{subject} — {label}",
             "subject": subject,
             "content": content,
@@ -102,7 +103,8 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
                     elapsed_s=ttv,
                 )
             except Exception as exc:
-                st.error(str(exc))
+                logger.error("Study guide generation failed: %s", exc, exc_info=True)
+                st.error("Study guide generation failed. Check your API key and try again.")
 
     if workspace["generated_notes"]:
         guide_hash = hashlib.sha256(workspace["generated_notes"].encode()).hexdigest()[:8]

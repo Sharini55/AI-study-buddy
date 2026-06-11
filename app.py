@@ -392,18 +392,21 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
         if saved:
             st.divider()
             st.markdown("**📚 Saved Guides**")
-            for idx, guide in enumerate(saved):
+            for guide in saved:
+                guide_id = guide["id"]
                 col_btn, col_del = st.columns([5, 1])
                 with col_btn:
                     btn_label = f"{guide['title']}  •  {guide['saved_at']}"
-                    if st.button(btn_label, key=f"open_guide_{idx}", use_container_width=True):
-                        st.session_state["viewing_guide"] = idx
+                    if st.button(btn_label, key=f"open_guide_{guide_id}", use_container_width=True):
+                        st.session_state["viewing_guide"] = guide_id
                         st.rerun()
                 with col_del:
-                    if st.button("✕", key=f"del_guide_{idx}", help="Remove"):
-                        st.session_state["saved_guides"].pop(idx)
-                        if st.session_state.get("viewing_guide") == idx:
+                    if st.button("✕", key=f"del_guide_{guide_id}", help="Remove"):
+                        if st.session_state.get("viewing_guide") == guide_id:
                             st.session_state["viewing_guide"] = None
+                        st.session_state["saved_guides"] = [
+                            g for g in st.session_state["saved_guides"] if g["id"] != guide_id
+                        ]
                         st.rerun()
 
         st.divider()
@@ -666,11 +669,12 @@ def main() -> None:
         return
 
     # 6. Saved guide viewer
-    viewing_idx = st.session_state.get("viewing_guide")
-    if viewing_idx is not None:
+    viewing_id = st.session_state.get("viewing_guide")
+    if viewing_id is not None:
         saved = st.session_state.get("saved_guides", [])
-        if 0 <= viewing_idx < len(saved):
-            render_guide_viewer(saved[viewing_idx])
+        guide_to_view = next((g for g in saved if g["id"] == viewing_id), None)
+        if guide_to_view:
+            render_guide_viewer(guide_to_view)
             return
         st.session_state["viewing_guide"] = None
 

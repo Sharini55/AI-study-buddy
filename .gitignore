@@ -1,5 +1,15 @@
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 .streamlit/
 .DS_Store
+
+# SunDevil AI Data & Local Storage
+sundevil_ai.db
+.storage/
+.metrics/
+*.log
+*.md
+!.github/
+!README.md

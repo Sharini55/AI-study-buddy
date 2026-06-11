@@ -2,6 +2,7 @@ import hashlib
 import io
 import re
 import time
+import uuid
 
 import fitz
 import streamlit as st
@@ -10,6 +11,8 @@ from PIL import Image, UnidentifiedImageError
 from pptx import Presentation
 
 MAX_IMAGE_EDGE = 1024
+MAX_UPLOAD_MB = 50                          # hard cap: files larger than this are rejected
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 IMAGE_ANALYSIS_PROMPT = "This is a computer science slide. Transcribe the code and explain any diagrams."
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -139,11 +142,26 @@ def analyze_image(api_key: str, image_bytes: bytes, mime_type: str) -> tuple[str
 # Main parse entry point
 # ---------------------------------------------------------------------------
 
-def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[str]]:
+def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict | None, int, list[str]]:
+    """Parse one uploaded file. Returns (file_item_or_None, unit_count, warnings).
+
+    Returns None as the first element when the file should be skipped entirely
+    (oversized, empty content with no images, etc.).
+    """
     from utils.metrics import report_parse_metrics
     parse_start = time.perf_counter()
     file_bytes = uploaded_file.getvalue()
     file_name = uploaded_file.name
+    file_size_bytes = len(file_bytes)
+
+    # ── Size guard ──────────────────────────────────────────────────────────
+    if file_size_bytes > MAX_UPLOAD_BYTES:
+        size_mb = file_size_bytes / (1024 * 1024)
+        return None, 0, [
+            f"'{file_name}' is {size_mb:.1f} MB — files larger than {MAX_UPLOAD_MB} MB are not supported. "
+            "Split the document and re-upload."
+        ]
+
     file_type = file_name.rsplit(".", 1)[-1].lower()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     warnings, images = [], []
@@ -174,10 +192,19 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[st
     parse_end = time.perf_counter()
     cleaned_content = clean_to_markdown(raw_text)
 
+    # ── Empty-content guard ────────────────────────────────────────────────
+    # An image uploaded without an API key yields empty text and no usable
+    # images. Skip it rather than inflating file/slide counts with dead weight.
+    if not cleaned_content and not images:
+        return None, 0, warnings + [
+            f"'{file_name}' produced no content. "
+            "For image files, a Gemini API key is required to extract text."
+        ]
+
     report_parse_metrics(
         file_name=file_name,
         file_type=file_type,
-        file_size_kb=len(file_bytes) / 1024,
+        file_size_kb=file_size_bytes / 1024,
         pages_or_slides=indexed_units,
         raw_chars=len(raw_text),
         cleaned_chars=len(cleaned_content),
@@ -187,7 +214,7 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[st
 
     return (
         {"id": f"{file_name}:{file_hash}", "name": file_name, "type": file_type,
-         "size": len(file_bytes), "hash": file_hash, "content": cleaned_content, "images": images},
+         "size": file_size_bytes, "hash": file_hash, "content": cleaned_content, "images": images},
         indexed_units,
         warnings,
     )
@@ -198,7 +225,6 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict, int, list[st
 # ---------------------------------------------------------------------------
 
 def blank_workspace() -> dict:
-    import uuid
     return {
         "id": uuid.uuid4().hex[:8],
         "files": [],
@@ -276,12 +302,15 @@ def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: 
 
     for uploaded_file in uploaded_files or []:
         file_item, unit_count, file_warnings = parse_uploaded_file(uploaded_file, api_key)
+        warnings.extend(file_warnings)
+        if file_item is None:
+            # Skipped by size cap or empty-content guard — warning already added
+            continue
         if file_item["id"] not in known_ids:
             file_item["unit_count"] = unit_count   # store for stats recompute
             workspace["files"].append(file_item)
             known_ids.add(file_item["id"])
             any_new = True
-        warnings.extend(file_warnings)
 
     if add_textbook_content(workspace, pasted_text, subject):
         any_new = True

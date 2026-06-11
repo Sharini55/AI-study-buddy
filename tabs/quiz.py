@@ -1,3 +1,4 @@
+import logging
 import time
 
 import streamlit as st
@@ -8,6 +9,8 @@ from utils.guide import (
     quiz_prompt, weak_area_guide_prompt, targeted_quiz_prompt, render_guide,
 )
 from utils.metrics import log_metric, report_generation_metrics
+
+logger = logging.getLogger(__name__)
 
 
 def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
@@ -51,7 +54,8 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                         prompt_text=_qprompt, output_text=response_text, elapsed_s=ttv,
                     )
                 except Exception as exc:
-                    st.error(str(exc))
+                    logger.error("Quiz generation failed: %s", exc, exc_info=True)
+                    st.error("Quiz generation failed. Check your API key and try again.")
 
     quiz = st.session_state[quiz_key]
     if not quiz:
@@ -77,38 +81,42 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
 
             for ci, choice in enumerate(choices):
                 if ci == correct_idx:
-                    marker = "✅ "
+                    marker = "✅"
                 elif ci == user_idx and not is_correct:
-                    marker = "❌ "
+                    marker = "❌"
                 else:
-                    marker = "    "
-                st.write(f"{marker}{choice}")
+                    marker = "⬜"
+                # Use st.text to avoid rendering model-generated markdown/HTML
+                st.text(f"{marker} {choice}")
 
             if is_correct:
                 st.success("Correct!")
             else:
-                st.error(f"Incorrect — correct answer: {choices[correct_idx]}")
+                # Escape model text — use st.text inside an error container
+                st.error(f"Incorrect — correct answer: option {correct_idx + 1}")
+                st.text(f"  {choices[correct_idx]}")
 
             explanation = question.get("explanation", "")
             if explanation:
-                st.info(f"💡 {explanation}")
+                st.info("💡 Explanation:")
+                st.text(explanation)
         else:
-            # Radio bound to attempt counter so re-take always starts blank (fix stale reset)
+            # Suffix each label with its position so duplicate choice strings get
+            # unique widget options — Streamlit radio keys on the display string,
+            # so two identical choices would collapse without this.
+            display_choices = [f"{chr(65 + i)}. {c}" for i, c in enumerate(choices)]
             radio_key = f"q_{wid}_{index}_attempt_{attempt_no}"
-            # Store index directly via on_change to avoid string-matching bug with duplicate choices
-            selected_label = st.radio(
+            selected_display = st.radio(
                 "Choose one",
-                choices,
+                display_choices,
                 index=None,
                 key=radio_key,
                 label_visibility="collapsed",
             )
-            if selected_label is not None:
-                # Safe: use list.index only when we just picked from the same list object
-                # For true safety we use the radio's position which equals choices.index here
-                # but guard against duplicates by tracking the first occurrence only
+            if selected_display is not None:
+                # Position is the letter prefix index — always unambiguous
                 selected_idx = next(
-                    (i for i, c in enumerate(choices) if c == selected_label),
+                    (i for i, d in enumerate(display_choices) if d == selected_display),
                     None,
                 )
                 if selected_idx is not None:
@@ -173,7 +181,8 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                             workspace["weak_area_report"] = guide
                             log_metric("weak_area_guide_generated", {"subject": subject, "topics": weak_topics})
                         except Exception as exc:
-                            st.error(str(exc))
+                            logger.error("Weak area guide failed: %s", exc, exc_info=True)
+                            st.error("Failed to generate targeted guide. Check your API key and try again.")
 
             with col2:
                 if st.button("🔄 Full Retake", use_container_width=True):
@@ -204,7 +213,8 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                             workspace["quiz_attempt_counter"] = workspace.get("quiz_attempt_counter", 0) + 1
                             st.rerun()
                         except Exception as exc:
-                            st.error(str(exc))
+                            logger.error("Targeted quiz failed: %s", exc, exc_info=True)
+                            st.error("Failed to generate targeted quiz. Check your API key and try again.")
 
             if workspace.get("weak_area_report"):
                 st.markdown("---")
