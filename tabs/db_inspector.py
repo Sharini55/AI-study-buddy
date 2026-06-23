@@ -1,7 +1,10 @@
+import logging
 import streamlit as st
 import pandas as pd
 from sqlalchemy.orm import Session
 from utils.persistence import SessionLocal, User, Workspace, SourceFile, SourceImage, StudyGuide, QuizAttempt
+
+logger = logging.getLogger(__name__)
 
 def render_db_inspector_tab():
     """Renders a beautiful, read-only visual spreadsheet audit view of active SQLite tables."""
@@ -22,7 +25,7 @@ def render_db_inspector_tab():
             if not records:
                 st.info("No registered users inside SQL yet.")
             else:
-                data = [{"Username": u.username, "Salted Password Hash": u.password_hash, "Created At": u.created_at} for u in records]
+                data = [{"Username": u.username, "Created At": u.created_at} for u in records]
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
                 
         elif table_selection == "Workspaces":
@@ -38,7 +41,7 @@ def render_db_inspector_tab():
             if not records:
                 st.info("No documents or text material indexed yet.")
             else:
-                data = [{"ID": f.id, "Workspace ID": f.workspace_id, "File Name": f.name, "File Type": f.file_type, "MD5 Hash": f.file_hash, "Character Count": len(f.content_text), "Created At": f.created_at} for f in records]
+                data = [{"ID": f.id, "Workspace ID": f.workspace_id, "File Name": f.name, "File Type": f.file_type, "SHA-256": f.file_hash, "Character Count": len(f.content_text), "Created At": f.created_at} for f in records]
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
                 
         elif table_selection == "Source Images":
@@ -65,7 +68,8 @@ def render_db_inspector_tab():
                 data = [{"ID": q.id, "Workspace ID": q.workspace_id, "Score (%)": f"{q.score}%", "Created At": q.created_at} for q in records]
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
                 
-    except Exception as e:
-        st.error(f"Error querying active database session: {str(e)}")
+    except Exception:
+        logger.error("db_inspector query failed", exc_info=True)
+        st.error("Something went wrong while loading the database view. Please try again.")
     finally:
         db.close()

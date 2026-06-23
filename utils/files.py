@@ -319,6 +319,7 @@ def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: 
     refresh_processed_text(workspace)
 
     if any_new:
+        st.session_state["is_dirty"] = True
         st.toast(
             f"Indexed! {workspace['stats']['slides']} pages/slides, "
             f"{workspace['stats']['chapters']} sections across {len(workspace['files'])} source(s)."

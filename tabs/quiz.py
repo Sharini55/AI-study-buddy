@@ -150,6 +150,7 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                 })
                 st.session_state[submitted_key] = True
                 st.session_state[post_quiz_key] = {"score": score, "missed": missed}
+                st.session_state["is_dirty"] = True
                 log_metric("quiz_submitted", {"subject": subject, "score": score, "missed_count": len(missed)})
                 st.rerun()
 

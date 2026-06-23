@@ -52,22 +52,22 @@ def _gemini_generate(client: genai.Client, contents: list, retries: int = 4) -> 
 
 
 def workspace_image_parts(workspace: dict) -> list[types.Part]:
-    """Extracts and validates image bytes to prepare multi-modal payloads."""
-    from utils.files import validate_image
+    """Build Gemini Part objects from already-optimised image bytes stored in the workspace.
+
+    Images are validated and compressed to JPEG/PNG exactly once at ingestion time
+    (parse_uploaded_file / extract_pptx).  Re-encoding on every API call is wasteful,
+    so we pass the cached bytes through directly.
+    """
     parts = []
     for file_item in workspace.get("files", []):
         for image in file_item.get("images", []):
-            try:
-                image_bytes, mime_type = validate_image(image["bytes"], image["mime_type"])
-                parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-            except ValueError:
-                workspace.setdefault("visual_warnings", []).append(
-                    "Visual analysis failed for this slide, but text was processed successfully."
-                )
+            raw = image.get("bytes")
+            if raw:
+                parts.append(types.Part.from_bytes(data=raw, mime_type=image["mime_type"]))
     return parts
 
 
-def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = "gemini_call", include_images: bool = False) -> str:
+def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = "gemini_call", include_images: bool = False, username: str | None = None) -> str:
     """Call Gemini and log TTV + token-efficiency metrics.
     
     Optimized: include_images is False by default to prevent large visual payloads 
@@ -100,5 +100,5 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
         "input_tokens": _count_tokens(prompt),
         "output_tokens": _count_tokens(output),
         "cost_usd": _estimate_cost(_count_tokens(prompt), _count_tokens(output)),
-    })
+    }, username=username)
     return output

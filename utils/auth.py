@@ -1,7 +1,11 @@
+import logging
+import os
 import re
 import time
 import streamlit as st
 from utils.persistence import SessionLocal, User, hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 
 def init_auth_session_state():
@@ -9,6 +13,8 @@ def init_auth_session_state():
         st.session_state["authenticated"] = False
     if "username" not in st.session_state:
         st.session_state["username"] = None
+    if "is_admin" not in st.session_state:
+        st.session_state["is_admin"] = False
     if "active_workspace" not in st.session_state:
         st.session_state["active_workspace"] = None
 
@@ -50,9 +56,10 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
         db.add(new_user)
         db.commit()
         return True, "Account created! You can now log in."
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return False, f"Database error: {str(e)}"
+        logger.error("register_user failed for '%s'", username, exc_info=True)
+        return False, "Something went wrong while creating your account. Please try again."
     finally:
         db.close()
 
@@ -72,33 +79,49 @@ def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
         if verify_password(user_record.password_hash, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
+            st.session_state["is_admin"] = bool(user_record.is_admin)
             return True, "Login successful!"
         return False, "Invalid username or password."
-    except Exception as e:
-        return False, f"Database connection error: {str(e)}"
+    except Exception:
+        logger.error("login_user failed for '%s'", username, exc_info=True)
+        return False, "Something went wrong while logging in. Please try again."
     finally:
         db.close()
 
 
 def delete_account(username: str) -> tuple[bool, str]:
-    """Permanently deletes the user and all their data."""
+    """Permanently deletes the user, all their DB rows, and their physical image files."""
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == username).first()
         if not user:
             return False, "User not found."
+        # Collect paths BEFORE cascade-delete removes the SourceImage rows.
+        image_paths = [
+            img.storage_path
+            for ws in user.workspaces
+            for f in ws.files
+            for img in f.images
+        ]
         db.delete(user)
         db.commit()
-        return True, "Account deleted."
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return False, f"Error: {str(e)}"
+        logger.error("delete_account failed for '%s'", username, exc_info=True)
+        return False, "Something went wrong while deleting your account. Please try again."
     finally:
         db.close()
+    # Remove physical files after the DB transaction succeeds.
+    for path in image_paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass  # Already gone — nothing to clean up.
+    return True, "Account deleted."
 
 
 def logout_user():
-    for key in ["authenticated", "username", "active_workspace", "workspaces",
+    for key in ["authenticated", "username", "is_admin", "active_workspace", "workspaces",
                 "saved_guides", "viewing_guide", "admin_view"]:
         st.session_state.pop(key, None)
     st.rerun()

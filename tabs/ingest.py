@@ -45,12 +45,17 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         with yes_col:
             if st.button("Yes, reset everything", type="primary", use_container_width=True,
                          key=f"confirm_yes_{subject}"):
+                from utils.persistence import delete_workspace_storage
                 fresh = blank_workspace()
                 # Preserve the workspace id so DB sync can still find the row
-                fresh["id"] = workspace.get("id", fresh["id"])
+                workspace_id = workspace.get("id", fresh["id"])
+                fresh["id"] = workspace_id
+                # Remove DB file rows and physical images before clearing memory
+                delete_workspace_storage(workspace_id)
                 workspace.clear()
                 workspace.update(fresh)
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
+                st.session_state["is_dirty"] = True
                 st.toast(f"Workspace '{subject}' has been reset.", icon="🗑")
                 st.rerun()
         with no_col:

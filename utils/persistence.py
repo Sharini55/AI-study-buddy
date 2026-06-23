@@ -1,8 +1,9 @@
+import hmac
 import os
 import hashlib
 import uuid
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime
+from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Define local file path for our serverless SQLite database
@@ -27,6 +28,7 @@ class User(Base):
     
     username = Column(String, primary_key=True)
     password_hash = Column(String, nullable=False)
+    is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Cascade deletes: If a user profile is deleted, delete all their workspaces
@@ -80,13 +82,14 @@ class SourceImage(Base):
 class StudyGuide(Base):
     """Stores generated active recall guides formatted with the Physics Method."""
     __tablename__ = "study_guides"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
     title = Column(String, nullable=False)
     content_md = Column(Text, nullable=False)
+    guide_hash = Column(String, nullable=True)   # sha-256[:12] of content; dedup key
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     workspace = relationship("Workspace", back_populates="guides")
 
 
@@ -107,6 +110,43 @@ class QuizAttempt(Base):
 # Build all local SQL tables on script initialization
 Base.metadata.create_all(bind=engine)
 
+
+def _migrate_and_seed_admin() -> None:
+    # Add is_admin to existing DBs that predate this column.
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists — nothing to do.
+
+    # Grant admin flag to the account named in the env var.
+    admin_username = os.environ.get("ADMIN_USERNAME", "sharinik")
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == admin_username).first()
+        if user and not user.is_admin:
+            user.is_admin = True
+            db.commit()
+    finally:
+        db.close()
+
+
+_migrate_and_seed_admin()
+
+
+def _migrate_study_guide_hash() -> None:
+    # Add guide_hash to existing DBs that predate this column.
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE study_guides ADD COLUMN guide_hash VARCHAR"))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists — nothing to do.
+
+
+_migrate_study_guide_hash()
+
 # ---------------------------------------------------------------------------
 # Salted Password Security (Security Hardening)
 # ---------------------------------------------------------------------------
@@ -125,7 +165,7 @@ def verify_password(stored_signature: str, provided_password: str) -> bool:
         salt = bytes.fromhex(salt_hex)
         db_hash = bytes.fromhex(hash_hex)
         test_hash = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
-        return test_hash == db_hash
+        return hmac.compare_digest(test_hash, db_hash)
     except Exception:
         return False
 
@@ -151,3 +191,47 @@ def load_local_image_bytes(storage_path: str) -> bytes:
         with open(storage_path, "rb") as f:
             return f.read()
     return b""
+
+
+def delete_workspace_from_db(workspace_id: str) -> None:
+    """Delete a workspace row, all its DB children, and physical image files."""
+    db = SessionLocal()
+    try:
+        # Collect paths before cascade-delete removes SourceImage rows.
+        paths = [
+            img.storage_path
+            for f in db.query(SourceFile).filter(SourceFile.workspace_id == workspace_id).all()
+            for img in f.images
+        ]
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if ws:
+            db.delete(ws)  # cascade removes SourceFile → SourceImage rows
+            db.commit()
+    finally:
+        db.close()
+    for path in paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass  # Already gone — nothing to clean up.
+
+
+def delete_workspace_storage(workspace_id: str) -> None:
+    """Delete all SourceFile rows for a workspace and remove their physical image files.
+
+    Safe to call before or after a workspace reset — silently skips missing files.
+    """
+    db = SessionLocal()
+    try:
+        files = db.query(SourceFile).filter(SourceFile.workspace_id == workspace_id).all()
+        paths = [img.storage_path for f in files for img in f.images]
+        for f in files:
+            db.delete(f)  # cascade removes SourceImage rows
+        db.commit()
+    finally:
+        db.close()
+    for path in paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass  # Already gone — nothing to clean up.

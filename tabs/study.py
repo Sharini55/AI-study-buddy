@@ -38,13 +38,15 @@ def _generate_with_progress(api_key: str, prompt: str, workspace: dict) -> str:
     progress = st.progress(0.0, text=_PROGRESS_STEPS[0][1])
     status_box = st.empty()
     result_holder: dict = {}
+    username = st.session_state.get("username", "anonymous")
 
     import threading
 
     def _run():
         try:
             result_holder["output"] = call_gemini(
-                api_key, prompt, workspace, metric_label="study_guide_generation"
+                api_key, prompt, workspace, metric_label="study_guide_generation",
+                username=username,
             )
         except Exception as exc:
             result_holder["error"] = exc
@@ -90,6 +92,7 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
                 _prompt = guide_prompt(subject, workspace, mode, has_images=has_images)
                 output = _generate_with_progress(api_key, _prompt, workspace)
                 workspace["generated_notes"] = output
+                st.session_state["is_dirty"] = True
                 ttv = round(time.perf_counter() - t_start, 2)
 
                 _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")

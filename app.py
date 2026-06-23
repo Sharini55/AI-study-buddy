@@ -1,16 +1,19 @@
 import hashlib
 import json
+import logging
 import os
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 
 # Configuration & Subsystem Imports
 from utils.auth import init_auth_session_state, render_login_signup_ui, logout_user
 from utils.persistence import (
     SessionLocal, User, Workspace, SourceFile, SourceImage, StudyGuide, QuizAttempt,
-    save_uploaded_image_locally, load_local_image_bytes
+    save_uploaded_image_locally, load_local_image_bytes, delete_workspace_from_db
 )
-from utils.files import blank_workspace
+from utils.files import blank_workspace, refresh_processed_text
 from utils.guide import render_guide
 
 APP_TITLE = "SunDevil AI"
@@ -197,10 +200,14 @@ def apply_theme() -> None:
 # DATA SYNCING: Read/Write Streamlit Workspaces dynamically to SQLite
 # ---------------------------------------------------------------------------
 
-def load_user_workspaces_from_db(username: str) -> dict:
-    """Queries SQLite and marshals database rows back into Streamlit workspace dictionary."""
+def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
+    """Queries SQLite and marshals database rows back into Streamlit workspace dictionary.
+
+    Returns (workspaces_dict, saved_guides) so the caller can set both in session state.
+    """
     db: Session = SessionLocal()
     workspaces_dict = {}
+    saved_guides: list = []
     try:
         user_record = db.query(User).filter(User.username == username).first()
         if user_record:
@@ -227,24 +234,37 @@ def load_user_workspaces_from_db(username: str) -> dict:
                         "images": images_list
                     })
                 
-                # Consolidate processed text
-                chunks = [f"# Source: {f['name']}\n\n{f['content']}" for f in ws_data["files"] if f["content"]]
-                ws_data["processed_text"] = "\n\n---\n\n".join(chunks).strip()
-                ws_data["stats"]["slides"] = len(ws_data["files"])
-                ws_data["stats"]["chapters"] = sum(f["content"].count("## ") for f in ws_data["files"])
+                refresh_processed_text(ws_data)
                 
-                # Load latest study guide
-                latest_guide = db.query(StudyGuide).filter(StudyGuide.workspace_id == ws.id).order_by(StudyGuide.created_at.desc()).first()
-                if latest_guide:
-                    ws_data["generated_notes"] = latest_guide.content_md
+                # Load all saved guides; populate sidebar list and restore active guide
+                all_guides = db.query(StudyGuide).filter(
+                    StudyGuide.workspace_id == ws.id
+                ).order_by(StudyGuide.created_at.desc()).all()
+                if all_guides:
+                    ws_data["generated_notes"] = all_guides[0].content_md
+                for g in all_guides:
+                    saved_guides.append({
+                        "id": g.guide_hash or g.id[:12],
+                        "title": g.title,
+                        "subject": ws.subject_name,
+                        "content": g.content_md,
+                        "saved_at": g.created_at.strftime("%b %d, %H:%M") if g.created_at else "",
+                    })
                 
                 # Load quiz historical entries
                 for quiz_row in ws.quizzes:
                     try:
+                        questions = json.loads(quiz_row.quiz_json)
+                        answers   = json.loads(quiz_row.answers_json)
+                        missed    = [
+                            q for i, q in enumerate(questions)
+                            if answers.get(str(i)) != q.get("answer_index")
+                        ]
                         ws_data["quiz_history"].append({
                             "score": quiz_row.score,
-                            "questions": json.loads(quiz_row.quiz_json),
-                            "answers": json.loads(quiz_row.answers_json)
+                            "questions": questions,
+                            "answers": answers,
+                            "missed_questions": missed,
                         })
                     except Exception:
                         continue
@@ -252,7 +272,7 @@ def load_user_workspaces_from_db(username: str) -> dict:
                 workspaces_dict[ws.subject_name] = ws_data
     finally:
         db.close()
-    return workspaces_dict
+    return workspaces_dict, saved_guides
 
 
 def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dict):
@@ -270,9 +290,9 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
         
         # Sync files
         for file_item in ws_memory.get("files", []):
-            existing_file = db.query(SourceFile).filter(SourceFile.workspace_id == ws_row.id, SourceFile.name == file_item["name"]).first()
+            content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
+            existing_file = db.query(SourceFile).filter(SourceFile.workspace_id == ws_row.id, SourceFile.file_hash == content_hash).first()
             if not existing_file:
-                content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
                 
                 new_file = SourceFile(
                     workspace_id=ws_row.id,
@@ -296,19 +316,22 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                     db.add(new_img)
                 db.commit()
                 
-        # Sync study guide markdown
-        if ws_memory.get("generated_notes"):
-            existing_guide = db.query(StudyGuide).filter(StudyGuide.workspace_id == ws_row.id).first()
+        # Sync all saved guides for this workspace, deduped by guide_hash
+        for guide in st.session_state.get("saved_guides", []):
+            if guide.get("subject") != subject_name:
+                continue
+            existing_guide = db.query(StudyGuide).filter(
+                StudyGuide.workspace_id == ws_row.id,
+                StudyGuide.guide_hash == guide["id"],
+            ).first()
             if not existing_guide:
-                new_guide = StudyGuide(
+                db.add(StudyGuide(
                     workspace_id=ws_row.id,
-                    title=f"{subject_name} Core Guide",
-                    content_md=ws_memory["generated_notes"]
-                )
-                db.add(new_guide)
-            else:
-                existing_guide.content_md = ws_memory["generated_notes"]
-            db.commit()
+                    title=guide["title"],
+                    content_md=guide["content"],
+                    guide_hash=guide["id"],
+                ))
+        db.commit()
             
         # Sync quiz history entries
         stored_attempts_count = db.query(QuizAttempt).filter(QuizAttempt.workspace_id == ws_row.id).count()
@@ -324,9 +347,10 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                 db.add(new_attempt)
             db.commit()
             
-    except Exception as e:
+    except Exception:
         db.rollback()
-        st.error(f"Failed to sync workspace to database: {str(e)}")
+        logger.error("save_active_workspace_to_db failed (user=%s, subject=%s)", username, subject_name, exc_info=True)
+        st.error("Something went wrong while saving your workspace. Please try again.")
     finally:
         db.close()
 
@@ -374,6 +398,9 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             if len(st.session_state["workspaces"]) == 1:
                 st.warning("Create another workspace before deleting the last one.")
             else:
+                ws_id = st.session_state["workspaces"][selected].get("id")
+                if ws_id:
+                    delete_workspace_from_db(ws_id)
                 del st.session_state["workspaces"][selected]
                 st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
                 st.rerun()
@@ -428,7 +455,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
 
 def render_profile_page(current_user: str) -> None:
     from utils.auth import delete_account
-    from utils.persistence import SessionLocal, Workspace, StudyGuide, QuizAttempt, SourceFile
 
     if st.button("← Back to workspace"):
         st.session_state["viewing_profile"] = False
@@ -439,19 +465,10 @@ def render_profile_page(current_user: str) -> None:
     st.divider()
 
     # ── Account stats ──────────────────────────────────────────────────────
-    db = SessionLocal()
-    try:
-        ws_count = len(st.session_state.get("workspaces", {}))
-        guide_count = sum(
-            1 for ws in st.session_state.get("workspaces", {}).values()
-            if ws.get("generated_notes")
-        )
-        quiz_count = sum(
-            len(ws.get("quiz_history", []))
-            for ws in st.session_state.get("workspaces", {}).values()
-        )
-    finally:
-        db.close()
+    workspaces = st.session_state.get("workspaces", {})
+    ws_count    = len(workspaces)
+    guide_count = sum(1 for ws in workspaces.values() if ws.get("generated_notes"))
+    quiz_count  = sum(len(ws.get("quiz_history", [])) for ws in workspaces.values())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Workspaces", ws_count)
@@ -622,9 +639,6 @@ def render_admin_dashboard(current_user: str) -> None:
 # Main Execution Entrypoint
 # ---------------------------------------------------------------------------
 
-ADMIN_USERNAME = "sharinik"   # ← the one account that sees admin dashboard
-
-
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon=":books:", layout="wide")
     init_auth_session_state()
@@ -636,20 +650,22 @@ def main() -> None:
         st.stop()
 
     current_user = st.session_state["username"]
-    is_admin = (current_user == ADMIN_USERNAME)
+    is_admin = st.session_state.get("is_admin", False)
 
     # 2. Session state bootstrap
     st.session_state.setdefault("saved_guides", [])
     st.session_state.setdefault("viewing_guide", None)
     st.session_state.setdefault("admin_view", False)
     st.session_state.setdefault("viewing_profile", False)
+    st.session_state.setdefault("is_dirty", False)
 
     # 3. Load workspaces from DB on first run
     if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
-        loaded = load_user_workspaces_from_db(current_user)
+        loaded, loaded_guides = load_user_workspaces_from_db(current_user)
         if loaded:
             st.session_state["workspaces"] = loaded
             st.session_state["active_workspace"] = next(iter(loaded))
+            st.session_state["saved_guides"] = loaded_guides
         else:
             st.session_state["workspaces"] = {"My First Workspace": blank_workspace()}
             st.session_state["active_workspace"] = "My First Workspace"
@@ -693,13 +709,14 @@ def main() -> None:
 
     with ingest_tab:
         render_ingest_tab(subject, workspace, api_key)
-        save_active_workspace_to_db(current_user, subject, workspace)
     with guide_tab:
         render_study_tab(api_key, subject, workspace, study_mode)
-        save_active_workspace_to_db(current_user, subject, workspace)
     with quiz_tab:
         render_quiz_tab(api_key, subject, workspace)
+
+    if st.session_state["is_dirty"]:
         save_active_workspace_to_db(current_user, subject, workspace)
+        st.session_state["is_dirty"] = False
 
 
 if __name__ == "__main__":
