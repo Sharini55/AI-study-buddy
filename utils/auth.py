@@ -47,6 +47,10 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
     if not ok:
         return False, msg
 
+    reserved = os.environ.get("ADMIN_USERNAME", "").strip().lower()
+    if reserved and username == reserved:
+        return False, "Registration rejected: This username is reserved or unavailable."
+
     db = SessionLocal()
     try:
         existing = db.query(User).filter(User.username == username).first()

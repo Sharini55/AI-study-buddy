@@ -1,8 +1,11 @@
 import hmac
+import logging
 import os
 import hashlib
 import uuid
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
@@ -121,7 +124,13 @@ def _migrate_and_seed_admin() -> None:
             pass  # Column already exists — nothing to do.
 
     # Grant admin flag to the account named in the env var.
-    admin_username = os.environ.get("ADMIN_USERNAME", "sharinik")
+    admin_username = os.environ.get("ADMIN_USERNAME")
+    if not admin_username:
+        logger.warning(
+            "ADMIN_USERNAME environment variable not configured. "
+            "Skipping admin account seeding."
+        )
+        return
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == admin_username).first()
