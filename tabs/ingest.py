@@ -13,6 +13,26 @@ def workspace_summary(workspace: dict) -> None:
 def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     from utils.files import index_materials, blank_workspace
 
+    st.markdown(
+        """
+        <style>
+        [data-testid="stFileUploaderDropzoneButton"] {
+            background-color: #1e1e1e !important;
+            color: #ffffff !important;
+            border: none !important;
+        }
+        [data-testid="stFileUploaderDropzoneButton"]:hover {
+            background-color: #2b2b2b !important;
+            color: #ffffff !important;
+        }
+        [data-testid="stFileUploaderDropzoneButton"] svg {
+            fill: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     left, right = st.columns([1, 1], gap="large")
     with left:
         uploaded_files = st.file_uploader(
