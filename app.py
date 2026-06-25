@@ -39,9 +39,17 @@ def apply_theme() -> None:
             --gold-dark: #B8942F;
         }
 
-        /* ── Hide Streamlit chrome (header bar, theme switcher, footer) ── */
-        header[data-testid="stHeader"],
+        /* ── Streamlit chrome — transparent header so collapsedControl stays in DOM ──
+           collapsedControl (sidebar expand arrow) lives *inside* stHeader.
+           display:none on the parent removes it entirely; transparency keeps it alive. */
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
         [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
         #MainMenu,
         footer { display: none !important; }
 
@@ -154,13 +162,13 @@ def apply_theme() -> None:
             color: #2D2D2D !important;
         }
         /* Upload/Browse button — dark bg, white text.
-           Covers old (baseButton-secondary), new (stBaseButton-secondary),
-           and the dropzone container selector for maximum compat with Streamlit 1.58+. */
+           All selectors are scoped to stFileUploader so other secondary buttons
+           (e.g. Reset Workspace) are not affected. */
         [data-testid="stFileUploaderDropzone"] button,
         [data-testid="stFileUploaderDropzoneButton"],
-        button[data-testid="stBaseButton-secondary"],
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"],
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] {
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
+        [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
             background: #1e1e1e !important;
             border: none !important;
             border-radius: 8px !important;
@@ -171,8 +179,6 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzone"] button p,
         [data-testid="stFileUploaderDropzoneButton"] span,
         [data-testid="stFileUploaderDropzoneButton"] p,
-        button[data-testid="stBaseButton-secondary"] span,
-        button[data-testid="stBaseButton-secondary"] p,
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] span,
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p,
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] span,
@@ -180,8 +186,7 @@ def apply_theme() -> None:
             color: #ffffff !important;
         }
         [data-testid="stFileUploaderDropzone"] button svg,
-        [data-testid="stFileUploaderDropzoneButton"] svg,
-        button[data-testid="stBaseButton-secondary"] svg { fill: #ffffff !important; }
+        [data-testid="stFileUploaderDropzoneButton"] svg { fill: #ffffff !important; }
 
         /* ── Username badge in sidebar — readable dark text on light bg ── */
         [data-testid="stSidebar"] code {
