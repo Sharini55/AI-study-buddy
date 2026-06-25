@@ -707,7 +707,12 @@ def render_admin_dashboard(current_user: str) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    st.set_page_config(page_title=APP_TITLE, page_icon=":books:", layout="wide")
+    st.set_page_config(
+        page_title=APP_TITLE,
+        page_icon=":books:",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
     init_auth_session_state()
     apply_theme()
 
