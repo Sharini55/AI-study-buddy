@@ -1,7 +1,12 @@
 import logging
+import re
 import time
 
 import streamlit as st
+
+# Gemini returns choices pre-labeled "A. ...", "B. ...", etc. per the quiz prompt.
+# Strip that prefix before we add our own so we never get "A. A. ..." doubles.
+_PREFIX_RE = re.compile(r'^[A-Da-d]\.\s*')
 
 from utils.gemini import call_gemini
 from utils.files import parse_json_response
@@ -86,25 +91,23 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                     marker = "❌"
                 else:
                     marker = "⬜"
-                # Use st.text to avoid rendering model-generated markdown/HTML
-                st.text(f"{marker} {choice}")
+                st.markdown(f"{marker}&ensp;{_PREFIX_RE.sub('', choice)}")
 
             if is_correct:
                 st.success("Correct!")
             else:
-                # Escape model text — use st.text inside an error container
                 st.error(f"Incorrect — correct answer: option {correct_idx + 1}")
-                st.text(f"  {choices[correct_idx]}")
+                st.markdown(f"&ensp;{_PREFIX_RE.sub('', choices[correct_idx])}")
 
             explanation = question.get("explanation", "")
             if explanation:
                 st.info("💡 Explanation:")
-                st.text(explanation)
+                st.write(explanation)
         else:
             # Suffix each label with its position so duplicate choice strings get
             # unique widget options — Streamlit radio keys on the display string,
             # so two identical choices would collapse without this.
-            display_choices = [f"{chr(65 + i)}. {c}" for i, c in enumerate(choices)]
+            display_choices = [f"{chr(65 + i)}. {_PREFIX_RE.sub('', c)}" for i, c in enumerate(choices)]
             radio_key = f"q_{wid}_{index}_attempt_{attempt_no}"
             selected_display = st.radio(
                 "Choose one",

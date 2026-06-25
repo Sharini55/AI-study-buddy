@@ -39,8 +39,16 @@ def apply_theme() -> None:
             --gold-dark: #B8942F;
         }
 
-        .stApp { background: var(--bg); color: var(--ink); }
-        .main .block-container { max-width: 1360px; padding-top: 2rem; }
+        /* ── Hide Streamlit chrome (header bar, theme switcher, footer) ── */
+        header[data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        #MainMenu,
+        footer { display: none !important; }
+
+        /* Force app background even when OS is in dark mode */
+        html, body { background: var(--bg) !important; color: var(--ink) !important; }
+        .stApp { background: var(--bg) !important; color: var(--ink) !important; }
+        .main .block-container { max-width: 1360px; padding-top: 1rem; }
 
         [data-testid="stSidebar"] {
             background: var(--sidebar);
@@ -190,6 +198,27 @@ def apply_theme() -> None:
             color: var(--ink);
         }
         div[data-testid="stAlert"] { border-radius: 14px; color: var(--ink); }
+
+        /* ── st.text renders as <pre> — keep ink color even in dark-OS ── */
+        pre, pre * { color: var(--ink) !important; background: transparent !important; }
+
+        /* ── Button testid selectors — survive Streamlit dark-theme override ── */
+        /* Primary buttons (gold) */
+        [data-testid="baseButton-primary"],
+        [data-testid="baseButton-primary"] p,
+        [data-testid="baseButton-primary"] span {
+            background: var(--gold) !important;
+            color: #2D2D2D !important;
+            border-color: var(--gold) !important;
+        }
+        /* Secondary buttons (white) — file-uploader browse button is more specific
+           so its maroon rule below still wins for that case */
+        [data-testid="baseButton-secondary"],
+        [data-testid="baseButton-secondary"] p,
+        [data-testid="baseButton-secondary"] span {
+            background: #FFFFFF !important;
+            color: #2D2D2D !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
