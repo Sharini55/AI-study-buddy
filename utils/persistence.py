@@ -9,15 +9,19 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Define local file path for our serverless SQLite database
-DB_FILE = "sundevil_ai.db"
+DB_FILE    = "sundevil_ai.db"
 STORAGE_DIR = "./.storage/images"
 
-# Ensure our local visual storage directory exists to safely hold slide images
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-# Initialize SQLAlchemy connection engine
-engine = create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
+# Use Azure PostgreSQL when DATABASE_URL is set; fall back to local SQLite for dev.
+_DATABASE_URL = os.getenv("DATABASE_URL")
+if _DATABASE_URL:
+    logger.info("Connecting to PostgreSQL via DATABASE_URL")
+    engine = create_engine(_DATABASE_URL)
+else:
+    logger.info("DATABASE_URL not set — using local SQLite (%s)", DB_FILE)
+    engine = create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
