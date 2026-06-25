@@ -467,7 +467,7 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             else:
                 ws_id = st.session_state["workspaces"][selected].get("id")
                 if ws_id:
-                    delete_workspace_from_db(ws_id)
+                    delete_workspace_from_db(ws_id, owner_username=username)
                 del st.session_state["workspaces"][selected]
                 st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
                 st.rerun()
@@ -568,12 +568,15 @@ def render_profile_page(current_user: str) -> None:
                     db2 = SessionLocal()
                     try:
                         user = db2.query(User).filter(User.username == current_user).first()
-                        if not verify_password(user.password_hash, current_pw):
+                        if user is None or not verify_password(user.password_hash, current_pw):
                             st.error("Current password is incorrect.")
                         else:
                             user.password_hash = hash_password(new_pw)
                             db2.commit()
                             st.success("Password updated successfully.")
+                    except Exception:
+                        logger.error("change_password failed for '%s'", current_user, exc_info=True)
+                        st.error("Something went wrong while updating your password. Please try again.")
                     finally:
                         db2.close()
 

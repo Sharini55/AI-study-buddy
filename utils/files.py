@@ -1,8 +1,11 @@
 import hashlib
 import io
+import logging
 import re
 import time
 import uuid
+
+logger = logging.getLogger(__name__)
 
 import fitz
 import streamlit as st
@@ -88,7 +91,8 @@ def extract_pdf_text(file_bytes: bytes) -> tuple[str, int, str]:
         with fitz.open(stream=file_bytes, filetype="pdf") as doc:
             return "\n\n".join(page.get_text("text") for page in doc), doc.page_count, ""
     except Exception as exc:
-        return "", 0, f"PDF extraction failed: {exc}"
+        logger.error("PDF extraction failed: %s", exc, exc_info=True)
+        return "", 0, "Unable to read this PDF — the file may be corrupted or password-protected."
 
 
 def extract_pptx(file_bytes: bytes) -> tuple[str, list[dict], int, str]:
@@ -115,7 +119,8 @@ def extract_pptx(file_bytes: bytes) -> tuple[str, list[dict], int, str]:
             slides.append("\n\n".join(slide_text))
         return "\n\n".join(slides), images, len(deck.slides), ""
     except Exception as exc:
-        return "", [], 0, f"PPTX extraction failed: {exc}"
+        logger.error("PPTX extraction failed: %s", exc, exc_info=True)
+        return "", [], 0, "Unable to read this PPTX — the file may be corrupted or use an unsupported format."
 
 
 def analyze_image(api_key: str, image_bytes: bytes, mime_type: str) -> tuple[str, bool]:

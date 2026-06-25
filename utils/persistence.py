@@ -12,6 +12,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 DB_FILE    = "sundevil_ai.db"
 STORAGE_DIR = "./.storage/images"
 
+# OWASP recommended minimum for PBKDF2-SHA256 (2024).  Stored in every new hash
+# so verify_password can handle hashes created with different iteration counts.
+_PBKDF2_ITERATIONS = 260_000
+
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
 # Use Azure PostgreSQL when DATABASE_URL is set; fall back to local SQLite for dev.
@@ -165,19 +169,36 @@ _migrate_study_guide_hash()
 # ---------------------------------------------------------------------------
 
 def hash_password(password: str) -> str:
-    """Generates a secure PBKDF2 salt-and-hash signature for student passwords."""
+    """Hash a password with PBKDF2-HMAC-SHA256.
+
+    Format: ``{iterations}:{salt_hex}:{hash_hex}``  — storing the iteration
+    count lets us raise it in future without breaking existing accounts.
+    """
     salt = os.urandom(16)
-    db_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
-    return salt.hex() + ":" + db_hash.hex()
+    db_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITERATIONS)
+    return f"{_PBKDF2_ITERATIONS}:{salt.hex()}:{db_hash.hex()}"
 
 
 def verify_password(stored_signature: str, provided_password: str) -> bool:
-    """Authenticates raw password input against stored database signature."""
+    """Verify a password against its stored hash.
+
+    Handles both the current 3-part format ``{iterations}:{salt}:{hash}`` and
+    the legacy 2-part format ``{salt}:{hash}`` (which assumed 100 000 iterations).
+    """
     try:
-        salt_hex, hash_hex = stored_signature.split(":")
-        salt = bytes.fromhex(salt_hex)
-        db_hash = bytes.fromhex(hash_hex)
-        test_hash = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
+        parts = stored_signature.split(":")
+        if len(parts) == 3:
+            iterations = int(parts[0])
+            salt      = bytes.fromhex(parts[1])
+            db_hash   = bytes.fromhex(parts[2])
+        elif len(parts) == 2:
+            # Legacy hashes pre-date iteration storage — assume original count.
+            iterations = 100_000
+            salt      = bytes.fromhex(parts[0])
+            db_hash   = bytes.fromhex(parts[1])
+        else:
+            return False
+        test_hash = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, iterations)
         return hmac.compare_digest(test_hash, db_hash)
     except Exception:
         return False
@@ -206,20 +227,32 @@ def load_local_image_bytes(storage_path: str) -> bytes:
     return b""
 
 
-def delete_workspace_from_db(workspace_id: str) -> None:
-    """Delete a workspace row, all its DB children, and physical image files."""
+def delete_workspace_from_db(workspace_id: str, owner_username: str | None = None) -> None:
+    """Delete a workspace row, all its DB children, and physical image files.
+
+    owner_username: when supplied the function verifies ownership before
+    deleting — any mismatch is logged and the call is a no-op.
+    """
     db = SessionLocal()
     try:
+        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+        if not ws:
+            return
+        if owner_username and ws.user_id != owner_username:
+            logger.warning(
+                "Unauthorized workspace delete: user '%s' attempted to delete "
+                "workspace '%s' owned by '%s'",
+                owner_username, workspace_id, ws.user_id,
+            )
+            return
         # Collect paths before cascade-delete removes SourceImage rows.
         paths = [
             img.storage_path
             for f in db.query(SourceFile).filter(SourceFile.workspace_id == workspace_id).all()
             for img in f.images
         ]
-        ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-        if ws:
-            db.delete(ws)  # cascade removes SourceFile → SourceImage rows
-            db.commit()
+        db.delete(ws)  # cascade removes SourceFile → SourceImage rows
+        db.commit()
     finally:
         db.close()
     for path in paths:

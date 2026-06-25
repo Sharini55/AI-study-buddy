@@ -7,6 +7,12 @@ from utils.persistence import SessionLocal, User, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 
+# Sentinel used when the requested username does not exist.  We always run the
+# full PBKDF2 verification path so response time does not reveal whether a
+# username is registered (timing-based enumeration defence).
+# Format matches the current hash_password output: {iterations}:{salt}:{hash}.
+_TIMING_SENTINEL = f"260000:{'0' * 32}:{'0' * 64}"
+
 
 def init_auth_session_state():
     if "authenticated" not in st.session_state:
@@ -79,6 +85,9 @@ def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
     try:
         user_record = db.query(User).filter(User.username == username).first()
         if not user_record:
+            # Run a full PBKDF2 round against the sentinel so response time is
+            # indistinguishable from a wrong-password attempt on a real account.
+            verify_password(_TIMING_SENTINEL, password)
             return False, "Invalid username or password."
         if verify_password(user_record.password_hash, password):
             st.session_state["authenticated"] = True
