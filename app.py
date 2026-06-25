@@ -135,28 +135,53 @@ def apply_theme() -> None:
             background: #FFFFFF !important;
             border: 2px dashed #C4B89A !important;
             border-radius: 14px !important;
+            padding: 0.75rem 1rem !important;
+        }
+        [data-testid="stFileUploader"] label {
+            color: var(--ink) !important;
+            line-height: 1.5 !important;
+            margin-bottom: 0.5rem !important;
+            padding-top: 0 !important;
         }
         [data-testid="stFileUploaderDropzone"] {
             background: #FFFFFF !important;
         }
+        /* Instructions text only — intentionally excludes button spans */
         [data-testid="stFileUploaderDropzoneInstructions"] span,
         [data-testid="stFileUploaderDropzoneInstructions"] small,
         [data-testid="stFileUploaderDropzoneInstructions"] p,
-        [data-testid="stFileUploader"] small,
-        [data-testid="stFileUploader"] span {
+        [data-testid="stFileUploader"] small {
             color: #2D2D2D !important;
         }
-        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] {
-            background: #8C1D40 !important;
-            border: 1.5px solid #8C1D40 !important;
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            border-radius: 999px !important;
+        /* Upload/Browse button — dark bg, white text.
+           Covers old (baseButton-secondary), new (stBaseButton-secondary),
+           and the dropzone container selector for maximum compat with Streamlit 1.58+. */
+        [data-testid="stFileUploaderDropzone"] button,
+        [data-testid="stFileUploaderDropzoneButton"],
+        button[data-testid="stBaseButton-secondary"],
+        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"],
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] {
+            background: #1e1e1e !important;
+            border: none !important;
+            border-radius: 8px !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
         }
+        [data-testid="stFileUploaderDropzone"] button span,
+        [data-testid="stFileUploaderDropzone"] button p,
+        [data-testid="stFileUploaderDropzoneButton"] span,
+        [data-testid="stFileUploaderDropzoneButton"] p,
+        button[data-testid="stBaseButton-secondary"] span,
+        button[data-testid="stBaseButton-secondary"] p,
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] span,
-        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p {
-            color: #FFFFFF !important;
+        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p,
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] span,
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p {
+            color: #ffffff !important;
         }
+        [data-testid="stFileUploaderDropzone"] button svg,
+        [data-testid="stFileUploaderDropzoneButton"] svg,
+        button[data-testid="stBaseButton-secondary"] svg { fill: #ffffff !important; }
 
         /* ── Username badge in sidebar — readable dark text on light bg ── */
         [data-testid="stSidebar"] code {
@@ -184,7 +209,6 @@ def apply_theme() -> None:
             opacity: 1 !important;
         }
 
-        .stFileUploader,
         div[data-testid="stMetric"],
         div[data-testid="stTextArea"],
         div[data-testid="stExpander"] {
@@ -211,14 +235,23 @@ def apply_theme() -> None:
             color: #2D2D2D !important;
             border-color: var(--gold) !important;
         }
-        /* Secondary buttons (white) — file-uploader browse button is more specific
-           so its maroon rule below still wins for that case */
+        /* Secondary buttons (white) — file-uploader upload button rules above are
+           more specific so they still win for that case */
         [data-testid="baseButton-secondary"],
         [data-testid="baseButton-secondary"] p,
         [data-testid="baseButton-secondary"] span {
             background: #FFFFFF !important;
             color: #2D2D2D !important;
         }
+
+        /* ── Sidebar expand/collapse arrow — always dark/visible on cream bg ── */
+        [data-testid="collapsedControl"],
+        [data-testid="collapsedControl"] button {
+            display: flex !important;
+            visibility: visible !important;
+            color: var(--ink) !important;
+        }
+        [data-testid="collapsedControl"] svg { fill: var(--ink) !important; }
         </style>
         """,
         unsafe_allow_html=True,
