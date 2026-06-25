@@ -4,5 +4,8 @@ backgroundColor = "#f9f6f0"
 secondaryBackgroundColor = "#f1eae0"
 textColor = "#1e1e1e"
 
+[ui]
+sidebarNavVisibility = "visible"
+
 [browser]
 gatherUsageStats = false
