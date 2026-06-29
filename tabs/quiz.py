@@ -8,11 +8,9 @@ import streamlit as st
 # Strip that prefix before we add our own so we never get "A. A. ..." doubles.
 _PREFIX_RE = re.compile(r'^[A-Da-d]\.\s*')
 
-from utils.gemini import call_gemini
+from utils.gemini import call_gemini, generate_remediation_pooled
 from utils.files import parse_json_response
-from utils.guide import (
-    quiz_prompt, weak_area_guide_prompt, targeted_quiz_prompt, render_guide,
-)
+from utils.guide import quiz_prompt, targeted_quiz_prompt, render_guide
 from utils.metrics import log_metric, report_generation_metrics
 
 logger = logging.getLogger(__name__)
@@ -174,16 +172,24 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
 
             with col1:
                 if st.button("📚 Review Weak Areas", type="primary", use_container_width=True):
-                    with st.spinner("Generating targeted study guide..."):
+                    n = len(weak_topics)
+                    spinner_msg = (
+                        f"Generating remediation guide for {n} topic(s)…"
+                        if n == 1
+                        else f"Batching {n} weak topics — generating remediation guide…"
+                    )
+                    with st.spinner(spinner_msg):
                         try:
-                            guide = call_gemini(
-                                api_key,
-                                weak_area_guide_prompt(subject, workspace, missed),
-                                workspace,
-                                metric_label="weak_area_guide",
+                            guide = generate_remediation_pooled(
+                                api_key, subject, workspace, missed,
+                                username=st.session_state.get("username", "anonymous"),
                             )
                             workspace["weak_area_report"] = guide
-                            log_metric("weak_area_guide_generated", {"subject": subject, "topics": weak_topics})
+                            log_metric("weak_area_guide_generated", {
+                                "subject": subject,
+                                "topics": weak_topics,
+                                "topic_count": n,
+                            })
                         except Exception as exc:
                             logger.error("Weak area guide failed: %s", exc, exc_info=True)
                             st.error("Failed to generate targeted guide. Check your API key and try again.")
@@ -222,11 +228,11 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
 
             if workspace.get("weak_area_report"):
                 st.markdown("---")
-                st.subheader("📖 Targeted Study Guide")
+                st.subheader(f"📖 Remediation Guide — {len(weak_topics)} Topic(s)")
                 st.download_button(
-                    "⬇ Download Weak Area Guide (.md)",
+                    "⬇ Download Remediation Guide (.md)",
                     data=workspace["weak_area_report"].encode("utf-8"),
-                    file_name=f"{subject.lower().replace(' ', '_')}_weak_areas.md",
+                    file_name=f"{subject.lower().replace(' ', '_')}_remediation.md",
                     mime="text/markdown",
                 )
                 render_guide(workspace["weak_area_report"])

@@ -1,5 +1,8 @@
+import json
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import streamlit as st
 from google import genai
@@ -65,6 +68,229 @@ def workspace_image_parts(workspace: dict) -> list[types.Part]:
             if raw:
                 parts.append(types.Part.from_bytes(data=raw, mime_type=image["mime_type"]))
     return parts
+
+
+def _parse_skeleton(raw: str) -> list[str]:
+    """Extract JSON topic list from the skeleton response, with graceful fallbacks."""
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE)
+    raw = raw.strip()
+    try:
+        topics = json.loads(raw)
+        if isinstance(topics, list) and all(isinstance(t, str) for t in topics):
+            return [t.strip() for t in topics if t.strip()]
+    except json.JSONDecodeError:
+        pass
+    # Fallback: pull every quoted string
+    matches = re.findall(r'"([^"]+)"', raw)
+    if matches:
+        return matches
+    # Last resort: split on newlines and strip list markers
+    lines = [re.sub(r"^[\d\-\*\.\s]+", "", l).strip() for l in raw.splitlines()]
+    return [l for l in lines if l and len(l) > 3][:8]
+
+
+def generate_study_guide_sot(
+    api_key: str,
+    subject: str,
+    workspace: dict,
+    mode: str,
+    progress_callback=None,
+    username: str | None = None,
+) -> str:
+    """
+    Skeleton-of-Thought parallel study guide generation.
+
+    Stage 1 — one API call returns a JSON list of N section topics (the skeleton).
+    Stage 2 — N parallel API calls each write one full section (the flesh).
+    Results are assembled in topic order into a single Markdown document.
+    """
+    from utils.guide import skeleton_prompt, section_prompt
+    from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
+
+    client = get_gemini_client(api_key)
+    t0 = time.perf_counter()
+    total_input_tokens = 0
+    total_output_tokens = 0
+
+    # ------------------------------------------------------------------ Stage 1
+    skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
+    skeleton_raw = _gemini_generate(client, [skel_text])
+    topics = _parse_skeleton(skeleton_raw)
+    total_input_tokens += _count_tokens(skel_text)
+    total_output_tokens += _count_tokens(skeleton_raw)
+
+    if progress_callback:
+        progress_callback("skeleton_done", len(topics))
+
+    # ------------------------------------------------------------------ Stage 2
+    completed = [0]
+    completed_lock = threading.Lock()
+    sections: dict[int, str] = {}
+
+    def _write_section(idx: int, topic: str) -> tuple[int, str, int, int]:
+        prompt_text = _safe_str(section_prompt(topic, subject, workspace, mode))
+        try:
+            text = _gemini_generate(client, [prompt_text])
+            return idx, text, _count_tokens(prompt_text), _count_tokens(text)
+        except Exception as exc:
+            fallback = f"## {topic}\n\n_This section could not be generated ({exc})._\n"
+            return idx, fallback, _count_tokens(prompt_text), 0
+
+    max_workers = min(len(topics), 6)  # cap to stay within Gemini RPM limits
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_write_section, i, topic): i
+            for i, topic in enumerate(topics)
+        }
+        for future in as_completed(futures):
+            idx, text, in_tok, out_tok = future.result()
+            sections[idx] = text
+            total_input_tokens += in_tok
+            total_output_tokens += out_tok
+            with completed_lock:
+                completed[0] += 1
+                done = completed[0]
+            if progress_callback:
+                progress_callback("section_done", done, len(topics))
+
+    assembled = "\n\n".join(sections[i] for i in sorted(sections))
+    elapsed = round(time.perf_counter() - t0, 3)
+    cost = _estimate_cost(total_input_tokens, total_output_tokens)
+
+    log_metric("study_guide_sot", {
+        "ttv_seconds": elapsed,
+        "sections": len(topics),
+        "parallelism": max_workers,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "cost_usd": cost,
+    }, username=username)
+
+    report_generation_metrics(
+        label=f"Study Guide ({mode}) [SoT x{len(topics)}]",
+        subject=subject,
+        mode=mode,
+        prompt_text=skel_text,
+        output_text=assembled,
+        elapsed_s=elapsed,
+        username=username,
+    )
+
+    return assembled
+
+
+_REMEDIATION_BATCH_SIZE = 3  # topics per Gemini call; tune down to 2 on free-tier RPM limits
+
+
+def generate_remediation_pooled(
+    api_key: str,
+    subject: str,
+    workspace: dict,
+    missed_questions: list[dict],
+    batch_size: int = _REMEDIATION_BATCH_SIZE,
+    username: str | None = None,
+) -> str:
+    """
+    Dynamic Remediation Pooling.
+
+    Groups weak topics into batches of `batch_size` and fires one Gemini call per
+    batch.  When there are multiple batches they run in parallel via
+    ThreadPoolExecutor, then results are stitched together in topic order.
+
+    Call reduction vs. naive per-topic approach:
+        N topics  →  ceil(N / batch_size) calls  (e.g. 6 topics → 2 calls, not 6)
+    """
+    from utils.guide import batched_remediation_prompt
+    from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
+
+    if not missed_questions:
+        return ""
+
+    # --- Deduplicate topics while preserving first-seen order ----------------
+    missed_per_topic: dict[str, list[str]] = {}
+    for q in missed_questions:
+        topic = q.get("topic", "General")
+        missed_per_topic.setdefault(topic, []).append(q.get("question", "?"))
+
+    unique_topics = list(dict.fromkeys(
+        q.get("topic", "General") for q in missed_questions
+    ))
+
+    batches: list[list[str]] = [
+        unique_topics[i: i + batch_size]
+        for i in range(0, len(unique_topics), batch_size)
+    ]
+
+    client = get_gemini_client(api_key)
+    t0 = time.perf_counter()
+    total_input_tokens = 0
+    total_output_tokens = 0
+    batch_results: dict[int, str] = {}
+    collected_prompts: list[str] = []
+    collect_lock = threading.Lock()
+
+    def _call_batch(batch_idx: int, topics_batch: list[str]) -> tuple[int, str, str, int, int]:
+        prompt_text = _safe_str(
+            batched_remediation_prompt(topics_batch, missed_per_topic, subject, workspace)
+        )
+        with collect_lock:
+            collected_prompts.append(prompt_text)
+        try:
+            text = _gemini_generate(client, [prompt_text])
+            return batch_idx, text, prompt_text, _count_tokens(prompt_text), _count_tokens(text)
+        except Exception as exc:
+            fallback = "\n\n".join(
+                f"## {t}\n\n_Section could not be generated ({exc})._" for t in topics_batch
+            )
+            return batch_idx, fallback, prompt_text, _count_tokens(prompt_text), 0
+
+    if len(batches) == 1:
+        # Fast path: skip thread overhead entirely for the common case
+        idx, text, prompt_text, in_tok, out_tok = _call_batch(0, batches[0])
+        batch_results[0] = text
+        total_input_tokens += in_tok
+        total_output_tokens += out_tok
+    else:
+        max_workers = min(len(batches), 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_call_batch, i, batch): i
+                for i, batch in enumerate(batches)
+            }
+            for future in as_completed(futures):
+                idx, text, prompt_text, in_tok, out_tok = future.result()
+                batch_results[idx] = text
+                total_input_tokens += in_tok
+                total_output_tokens += out_tok
+
+    assembled = "\n\n".join(batch_results[i] for i in sorted(batch_results))
+    elapsed = round(time.perf_counter() - t0, 3)
+    cost = _estimate_cost(total_input_tokens, total_output_tokens)
+
+    log_metric("remediation_pooled", {
+        "ttv_seconds": elapsed,
+        "topics": len(unique_topics),
+        "batches": len(batches),
+        "batch_size": batch_size,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "cost_usd": cost,
+    }, username=username)
+
+    combined_prompt = "\n\n--- BATCH SEPARATOR ---\n\n".join(collected_prompts)
+    report_generation_metrics(
+        label=f"Remediation Guide [Pooled {len(unique_topics)}T/{len(batches)}B]",
+        subject=subject,
+        mode=f"{len(unique_topics)} topic(s) in {len(batches)} batch(es) of ≤{batch_size}",
+        prompt_text=combined_prompt,
+        output_text=assembled,
+        elapsed_s=elapsed,
+        username=username,
+    )
+
+    return assembled
 
 
 def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = "gemini_call", include_images: bool = False, username: str | None = None) -> str:

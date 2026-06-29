@@ -1,24 +1,15 @@
 import datetime
 import hashlib
 import logging
+import threading
 import time
 
 import streamlit as st
 
-from utils.gemini import call_gemini
-from utils.guide import guide_prompt, render_guide
-from utils.metrics import report_generation_metrics
+from utils.gemini import generate_study_guide_sot
+from utils.guide import render_guide
 
 logger = logging.getLogger(__name__)
-
-_PROGRESS_STEPS = [
-    (0.05, "Reading your materials…"),
-    (0.20, "Identifying key topics…"),
-    (0.40, "Writing explanations and examples…"),
-    (0.65, "Building practice problems…"),
-    (0.85, "Adding worked answers…"),
-    (0.95, "Formatting your guide…"),
-]
 
 
 def _save_guide(subject: str, content: str, label: str = "Study Guide") -> None:
@@ -34,18 +25,31 @@ def _save_guide(subject: str, content: str, label: str = "Study Guide") -> None:
         })
 
 
-def _generate_with_progress(api_key: str, prompt: str, workspace: dict) -> str:
-    progress = st.progress(0.0, text=_PROGRESS_STEPS[0][1])
-    status_box = st.empty()
+def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: str) -> str:
+    """
+    Runs SoT generation in a background thread and animates a real-progress bar.
+
+    The progress bar reflects actual work: Stage 1 skeleton (~15%) then each
+    completed section advances the bar proportionally toward 95%.
+    """
+    progress = st.progress(0.05, text="Analyzing materials and planning your guide…")
+    progress_state: dict = {"stage": "init", "done": 0, "total": 0}
+    state_lock = threading.Lock()
     result_holder: dict = {}
     username = st.session_state.get("username", "anonymous")
 
-    import threading
+    def on_progress(event: str, *args) -> None:
+        with state_lock:
+            if event == "skeleton_done":
+                progress_state.update(stage="sections", total=args[0], done=0)
+            elif event == "section_done":
+                progress_state.update(done=args[0], total=args[1])
 
-    def _run():
+    def _run() -> None:
         try:
-            result_holder["output"] = call_gemini(
-                api_key, prompt, workspace, metric_label="study_guide_generation",
+            result_holder["output"] = generate_study_guide_sot(
+                api_key, subject, workspace, mode,
+                progress_callback=on_progress,
                 username=username,
             )
         except Exception as exc:
@@ -54,23 +58,22 @@ def _generate_with_progress(api_key: str, prompt: str, workspace: dict) -> str:
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
-    step_idx = 0
-    t0 = time.perf_counter()
-
     while thread.is_alive():
-        elapsed = time.perf_counter() - t0
-        fraction = min(elapsed / 45.0, 0.94)   # calibrated to ~45s max
-        while step_idx < len(_PROGRESS_STEPS) - 1 and fraction >= _PROGRESS_STEPS[step_idx + 1][0]:
-            step_idx += 1
-        pct, msg = _PROGRESS_STEPS[step_idx]
-        progress.progress(max(fraction, pct), text=msg)
-        time.sleep(0.4)
+        with state_lock:
+            state = dict(progress_state)
+        if state["stage"] == "init":
+            progress.progress(0.08, text="Planning your study guide…")
+        elif state["stage"] == "sections":
+            total, done = state["total"], state["done"]
+            frac = 0.15 + (done / total) * 0.80 if total else 0.15
+            label = f"Writing sections in parallel… ({done}/{total} complete)"
+            progress.progress(frac, text=label)
+        time.sleep(0.3)
 
     thread.join()
     progress.progress(1.0, text="Done!")
     time.sleep(0.3)
     progress.empty()
-    status_box.empty()
 
     if "error" in result_holder:
         raise result_holder["error"]
@@ -87,24 +90,10 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
             st.warning("Add material in the Ingest Material tab first.")
         else:
             try:
-                t_start = time.perf_counter()
-                has_images = any(f.get("images") for f in workspace.get("files", []))
-                _prompt = guide_prompt(subject, workspace, mode, has_images=has_images)
-                output = _generate_with_progress(api_key, _prompt, workspace)
+                output = _generate_with_progress(api_key, subject, workspace, mode)
                 workspace["generated_notes"] = output
                 st.session_state["is_dirty"] = True
-                ttv = round(time.perf_counter() - t_start, 2)
-
                 _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
-
-                report_generation_metrics(
-                    label=f"Study Guide ({mode})",
-                    subject=subject,
-                    mode=mode,
-                    prompt_text=_prompt,
-                    output_text=workspace["generated_notes"],
-                    elapsed_s=ttv,
-                )
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
                 st.error("Study guide generation failed. Check your API key and try again.")

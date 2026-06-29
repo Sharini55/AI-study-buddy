@@ -27,21 +27,37 @@ def apply_theme() -> None:
     st.markdown(
         """
         <style>
+        /* ── Truculenta — variable font, full weight + optical-size range ── */
+        @import url('https://fonts.googleapis.com/css2?family=Truculenta:opsz,wght@12..72,100..900&display=swap');
+
+        /* ── Design tokens ── */
         :root {
-            --bg: #FCF9F1;
-            --sidebar: #F4F1E8;
-            --panel: #FFFDF7;
-            --ink: #2D2D2D;
-            --muted: #6F6A60;
-            --line: #E7DECF;
-            --rose: #E8A0BF;
-            --gold: #D4AF37;
-            --gold-dark: #B8942F;
+            --bg:          #F5F8EE;   /* warm green-tinted page canvas  */
+            --sidebar:     #ECF1E2;   /* slightly deeper green for sidebar */
+            --panel:       #FFFFFF;
+            --ink:         #242B18;   /* very dark green-black for max contrast */
+            --muted:       #5C6A48;
+            --line:        #C5D99A;   /* soft green rule / border */
+            --green:       #ABC270;   /* primary accent — bounding, badges, active states */
+            --green-dark:  #8BA552;   /* hover for green elements */
+            --yellow:      #FEC868;   /* primary CTA buttons, tab highlights */
+            --orange:      #FDA769;   /* hover state for yellow elements */
+            --green-glow:  rgba(171, 194, 112, 0.22);
         }
 
-        /* ── Streamlit chrome — transparent header so collapsedControl stays in DOM ──
-           collapsedControl (sidebar expand arrow) lives *inside* stHeader.
-           display:none on the parent removes it entirely; transparency keeps it alive. */
+        /* ── Typography — Truculenta across all text-bearing elements ── */
+        html, body, .stApp,
+        h1, h2, h3, h4, h5, h6,
+        p, label, span, button, input, textarea, select,
+        [data-testid="stSidebar"] *,
+        [data-testid="stTabs"] button[role="tab"],
+        [data-testid="stMetricLabel"] label,
+        [data-testid="stMetricValue"],
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+            font-family: 'Truculenta', sans-serif !important;
+        }
+
+        /* ── Strip Streamlit chrome ── */
         header[data-testid="stHeader"] {
             background: transparent !important;
             border: none !important;
@@ -53,74 +69,92 @@ def apply_theme() -> None:
         #MainMenu,
         footer { display: none !important; }
 
-        /* Force app background even when OS is in dark mode */
+        /* ── Page canvas — force pastel even when OS is in dark mode ── */
         html, body { background: var(--bg) !important; color: var(--ink) !important; }
-        .stApp { background: var(--bg) !important; color: var(--ink) !important; }
+        .stApp    { background: var(--bg) !important; color: var(--ink) !important; }
         .main .block-container { max-width: 1360px; padding-top: 1rem; }
 
+        /* ── Sidebar ── */
         [data-testid="stSidebar"] {
-            background: var(--sidebar);
-            border-right: 1px solid var(--line);
+            background: var(--sidebar) !important;
+            border-right: 2px solid var(--line) !important;
         }
-        [data-testid="stSidebar"] * { color: var(--ink); letter-spacing: 0; }
+        [data-testid="stSidebar"] * { color: var(--ink) !important; letter-spacing: 0; }
 
+        /* Sidebar buttons — yellow primary, orange hover */
         [data-testid="stSidebar"] .stButton > button {
-            background: #8C1D40 !important;
-            border: 1px solid #8C1D40 !important;
-            color: #FFFFFF !important;
+            background: var(--yellow) !important;
+            border: 1.5px solid var(--yellow) !important;
+            color: var(--ink) !important;
             border-radius: 999px !important;
             font-weight: 700 !important;
+            font-family: 'Truculenta', sans-serif !important;
+            transition: background 0.15s, border-color 0.15s;
         }
         [data-testid="stSidebar"] .stButton > button *,
         [data-testid="stSidebar"] .stButton > button p,
-        [data-testid="stSidebar"] .stButton > button span { color: #FFFFFF !important; }
+        [data-testid="stSidebar"] .stButton > button span { color: var(--ink) !important; }
         [data-testid="stSidebar"] .stButton > button:hover,
         [data-testid="stSidebar"] .stButton > button:focus {
-            background: #741634 !important;
-            border-color: #741634 !important;
-            color: #FFFFFF !important;
+            background: var(--orange) !important;
+            border-color: var(--orange) !important;
         }
 
-        h1, h2, h3, p, label, span { color: var(--ink); letter-spacing: 0; }
+        /* ── Headings ── */
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--ink) !important;
+            font-family: 'Truculenta', sans-serif !important;
+            letter-spacing: -0.3px;
+        }
 
+        /* ── Main workspace tabs — green active, clean inactive ── */
         div[data-testid="stTabs"] button[role="tab"] {
             border-radius: 999px;
-            padding: 10px 16px;
+            padding: 10px 20px;
             color: var(--ink);
+            font-family: 'Truculenta', sans-serif !important;
+            font-weight: 600;
+            transition: background 0.15s;
         }
         div[data-testid="stTabs"] button[aria-selected="true"] {
-            background: #FFFFFF;
-            border: 1px solid var(--line);
+            background: var(--green) !important;
+            border: none !important;
+            color: #FFFFFF !important;
+        }
+        div[data-testid="stTabs"] button[aria-selected="true"] p,
+        div[data-testid="stTabs"] button[aria-selected="true"] span { color: #FFFFFF !important; }
+        div[data-testid="stTabs"] button[aria-selected="false"]:hover {
+            background: #DFE9C8 !important;
         }
 
+        /* ── All non-sidebar buttons — secondary (white) ── */
         .stButton > button,
         .stDownloadButton > button {
             border-radius: 999px;
             border: 1.5px solid var(--line);
             background: #FFFFFF !important;
-            color: #2D2D2D !important;
-            font-weight: 650;
+            color: var(--ink) !important;
+            font-weight: 600;
+            font-family: 'Truculenta', sans-serif !important;
+            transition: background 0.15s, border-color 0.15s;
         }
         .stButton > button *,
         .stButton > button p,
         .stButton > button span,
         .stDownloadButton > button *,
         .stDownloadButton > button p,
-        .stDownloadButton > button span {
-            color: #2D2D2D !important;
-        }
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {
-            background: #F5F0E8 !important;
-            border-color: #C4B89A !important;
-            color: #2D2D2D !important;
+        .stDownloadButton > button span { color: var(--ink) !important; }
+        .stButton > button:hover {
+            background: #E8F0D5 !important;
+            border-color: var(--green) !important;
         }
 
+        /* Primary buttons — yellow fill, orange hover */
         .stButton > button[kind="primary"],
         .stDownloadButton > button {
-            background: var(--gold) !important;
-            border-color: var(--gold) !important;
-            color: #2D2D2D !important;
+            background: var(--yellow) !important;
+            border-color: var(--yellow) !important;
+            color: var(--ink) !important;
             font-weight: 700;
         }
         .stButton > button[kind="primary"] *,
@@ -128,21 +162,41 @@ def apply_theme() -> None:
         .stButton > button[kind="primary"] span,
         .stDownloadButton > button *,
         .stDownloadButton > button p,
-        .stDownloadButton > button span {
-            color: #2D2D2D !important;
-        }
+        .stDownloadButton > button span { color: var(--ink) !important; }
         .stButton > button[kind="primary"]:hover,
         .stDownloadButton > button:hover {
-            background: var(--gold-dark) !important;
-            border-color: var(--gold-dark) !important;
-            color: #2D2D2D !important;
+            background: var(--orange) !important;
+            border-color: var(--orange) !important;
         }
 
-        /* ── File uploader — force light theme throughout ── */
+        /* testid overrides that survive Streamlit's dark-theme injection */
+        [data-testid="baseButton-primary"],
+        [data-testid="stBaseButton-primary"] {
+            background: var(--yellow) !important;
+            border-color: var(--yellow) !important;
+            color: var(--ink) !important;
+            font-family: 'Truculenta', sans-serif !important;
+        }
+        [data-testid="baseButton-primary"] p,
+        [data-testid="baseButton-primary"] span,
+        [data-testid="stBaseButton-primary"] p,
+        [data-testid="stBaseButton-primary"] span { color: var(--ink) !important; }
+        [data-testid="baseButton-secondary"],
+        [data-testid="stBaseButton-secondary"] {
+            background: #FFFFFF !important;
+            color: var(--ink) !important;
+            font-family: 'Truculenta', sans-serif !important;
+        }
+        [data-testid="baseButton-secondary"] p,
+        [data-testid="baseButton-secondary"] span,
+        [data-testid="stBaseButton-secondary"] p,
+        [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
+
+        /* ── File uploader — green dashed border, green Browse button ── */
         [data-testid="stFileUploader"] {
             background: #FFFFFF !important;
-            border: 2px dashed #C4B89A !important;
-            border-radius: 14px !important;
+            border: 2.5px dashed var(--green) !important;
+            border-radius: 18px !important;
             padding: 0.75rem 1rem !important;
         }
         [data-testid="stFileUploader"] label {
@@ -150,30 +204,26 @@ def apply_theme() -> None:
             line-height: 1.5 !important;
             margin-bottom: 0.5rem !important;
             padding-top: 0 !important;
+            font-family: 'Truculenta', sans-serif !important;
         }
-        [data-testid="stFileUploaderDropzone"] {
-            background: #FFFFFF !important;
-        }
-        /* Instructions text only — intentionally excludes button spans */
+        [data-testid="stFileUploaderDropzone"] { background: #FFFFFF !important; }
         [data-testid="stFileUploaderDropzoneInstructions"] span,
         [data-testid="stFileUploaderDropzoneInstructions"] small,
         [data-testid="stFileUploaderDropzoneInstructions"] p,
-        [data-testid="stFileUploader"] small {
-            color: #2D2D2D !important;
-        }
-        /* Upload/Browse button — dark bg, white text.
-           All selectors are scoped to stFileUploader so other secondary buttons
-           (e.g. Reset Workspace) are not affected. */
+        [data-testid="stFileUploader"] small { color: var(--muted) !important; }
+
+        /* Browse / Upload button inside file uploader — green fill, white text */
         [data-testid="stFileUploaderDropzone"] button,
         [data-testid="stFileUploaderDropzoneButton"],
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"],
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
         [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
-            background: #1e1e1e !important;
+            background: var(--green) !important;
             border: none !important;
-            border-radius: 8px !important;
-            color: #ffffff !important;
+            border-radius: 10px !important;
+            color: #FFFFFF !important;
             font-weight: 600 !important;
+            font-family: 'Truculenta', sans-serif !important;
         }
         [data-testid="stFileUploaderDropzone"] button span,
         [data-testid="stFileUploaderDropzone"] button p,
@@ -182,74 +232,164 @@ def apply_theme() -> None:
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] span,
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p,
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] span,
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p {
-            color: #ffffff !important;
-        }
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p { color: #FFFFFF !important; }
         [data-testid="stFileUploaderDropzone"] button svg,
-        [data-testid="stFileUploaderDropzoneButton"] svg { fill: #ffffff !important; }
+        [data-testid="stFileUploaderDropzoneButton"] svg { fill: #FFFFFF !important; }
 
-        /* ── Username badge in sidebar — readable dark text on light bg ── */
-        [data-testid="stSidebar"] code {
-            background: #E7DECF !important;
-            color: #2D2D2D !important;
-            border-radius: 6px !important;
-            padding: 2px 8px !important;
-            font-weight: 700 !important;
-        }
-
-        div[data-testid="stAlert"] { border-radius: 14px; color: var(--ink); }
+        /* ── Input fields — green focus ring ── */
         div[data-baseweb="input"] input,
         div[data-baseweb="textarea"] textarea,
         [data-testid="stTextInput"] input,
         [data-testid="stTextArea"] textarea {
-            color: #2D2D2D !important;
-            caret-color: #2D2D2D !important;
+            color: var(--ink) !important;
+            caret-color: var(--green) !important;
             background: #FFFFFF !important;
+            border-color: var(--line) !important;
+            border-radius: 10px !important;
+            font-family: 'Truculenta', sans-serif !important;
+        }
+        div[data-baseweb="input"] input:focus,
+        [data-testid="stTextInput"] input:focus {
+            border-color: var(--green) !important;
+            box-shadow: 0 0 0 3px var(--green-glow) !important;
+            outline: none !important;
+        }
+        div[data-baseweb="textarea"] textarea:focus,
+        [data-testid="stTextArea"] textarea:focus {
+            border-color: var(--green) !important;
+            box-shadow: 0 0 0 3px var(--green-glow) !important;
+            outline: none !important;
         }
         input::placeholder,
         textarea::placeholder,
         [data-testid="stTextInput"] input::placeholder,
         [data-testid="stTextArea"] textarea::placeholder {
-            color: #6F6A60 !important;
+            color: var(--muted) !important;
             opacity: 1 !important;
         }
 
-        div[data-testid="stMetric"],
-        div[data-testid="stTextArea"],
+        /* ── Cards: metrics, expanders, text areas ── */
+        div[data-testid="stMetric"] {
+            background: #FFFFFF;
+            border: 1.5px solid var(--line);
+            border-radius: 16px;
+            padding: 1rem 1.25rem;
+        }
         div[data-testid="stExpander"] {
+            background: var(--panel) !important;
+            border: 1.5px solid var(--line) !important;
+            border-radius: 16px !important;
+            border-left: 4px solid var(--green) !important;
+        }
+        div[data-testid="stExpander"] summary {
+            font-family: 'Truculenta', sans-serif !important;
+            font-weight: 600;
+            color: var(--ink) !important;
+        }
+        div[data-testid="stTextArea"] {
             background: var(--panel);
             border-radius: 14px;
         }
         div[data-testid="stTextArea"] textarea {
-            border: 2px solid var(--rose);
+            border: 2px solid var(--line);
             border-radius: 14px;
             background: #FFFFFF;
             color: var(--ink);
         }
-        div[data-testid="stAlert"] { border-radius: 14px; color: var(--ink); }
 
-        /* ── st.text renders as <pre> — keep ink color even in dark-OS ── */
-        pre, pre * { color: var(--ink) !important; background: transparent !important; }
-
-        /* ── Button testid selectors — survive Streamlit dark-theme override ── */
-        /* Primary buttons (gold) */
-        [data-testid="baseButton-primary"],
-        [data-testid="baseButton-primary"] p,
-        [data-testid="baseButton-primary"] span {
-            background: var(--gold) !important;
-            color: #2D2D2D !important;
-            border-color: var(--gold) !important;
+        /* ── Login form card ── */
+        [data-testid="stForm"] {
+            background: #FFFFFF;
+            border: 1.5px solid var(--line);
+            border-radius: 18px;
+            padding: 1.5rem 1.5rem 0.5rem;
         }
-        /* Secondary buttons (white) — file-uploader upload button rules above are
-           more specific so they still win for that case */
-        [data-testid="baseButton-secondary"],
-        [data-testid="baseButton-secondary"] p,
-        [data-testid="baseButton-secondary"] span {
+
+        /* ── Alert components ── */
+        div[data-testid="stAlert"] {
+            border-radius: 14px;
+            color: var(--ink);
+            font-family: 'Truculenta', sans-serif !important;
+        }
+
+        /* ── Progress bar — green fill ── */
+        div[role="progressbar"] > div,
+        .stProgress > div > div > div > div {
+            background-color: var(--green) !important;
+            border-radius: 999px;
+        }
+
+        /* ── Selectbox / dropdown ── */
+        [data-testid="stSelectbox"] [data-baseweb="select"] > div {
             background: #FFFFFF !important;
-            color: #2D2D2D !important;
+            border-color: var(--line) !important;
+            border-radius: 10px !important;
+            font-family: 'Truculenta', sans-serif !important;
+        }
+        [data-testid="stSelectbox"] [data-baseweb="select"] > div:focus-within {
+            border-color: var(--green) !important;
+            box-shadow: 0 0 0 3px var(--green-glow) !important;
         }
 
-        /* ── Sidebar expand/collapse arrow — always dark/visible on cream bg ── */
+        /* ── Radio buttons — green accent ── */
+        [data-baseweb="radio"] > div:first-child {
+            border-color: var(--green) !important;
+        }
+        [data-baseweb="radio"] > div:first-child[aria-checked="true"] {
+            background: var(--green) !important;
+            border-color: var(--green) !important;
+        }
+
+        /* ── Checkboxes — green accent ── */
+        [data-baseweb="checkbox"] [role="checkbox"] {
+            border-color: var(--green) !important;
+        }
+        [data-baseweb="checkbox"] [role="checkbox"][aria-checked="true"] {
+            background: var(--green) !important;
+            border-color: var(--green) !important;
+        }
+
+        /* ── Username badge in sidebar — green pill ── */
+        [data-testid="stSidebar"] code {
+            background: var(--green) !important;
+            color: #FFFFFF !important;
+            border-radius: 8px !important;
+            padding: 3px 10px !important;
+            font-weight: 700 !important;
+        }
+
+        /* ── Dataframe table ── */
+        [data-testid="stDataFrame"] {
+            border: 1.5px solid var(--line) !important;
+            border-radius: 14px !important;
+            overflow: hidden;
+        }
+        [data-testid="stDataFrame"] th {
+            background: var(--sidebar) !important;
+            color: var(--ink) !important;
+            font-family: 'Truculenta', sans-serif !important;
+            font-weight: 700;
+        }
+
+        /* ── Divider ── */
+        hr { border-color: var(--line) !important; opacity: 1; }
+
+        /* ── pre / code ── */
+        pre, pre * { color: var(--ink) !important; background: transparent !important; }
+        code:not([class]) {
+            background: #E3EED0 !important;
+            color: #2A450A !important;
+            border-radius: 5px !important;
+            padding: 1px 5px !important;
+            font-family: 'Truculenta', monospace !important;
+        }
+
+        /* ── Spinner ── */
+        [data-testid="stSpinner"] > div {
+            border-top-color: var(--green) !important;
+        }
+
+        /* ── Sidebar expand/collapse arrow ── */
         [data-testid="collapsedControl"],
         [data-testid="collapsedControl"] button {
             display: flex !important;
