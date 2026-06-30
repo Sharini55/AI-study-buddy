@@ -1014,7 +1014,7 @@ def main() -> None:
     from tabs.ingest import render_ingest_tab
     from tabs.study import render_study_tab
     from tabs.quiz import render_quiz_tab
-    from tabs.saved_guides_view import render_saved_guides_tab  # Optional fallback view file if desired
+    #from tabs.saved_guides_view import render_saved_guides_tab  # Optional fallback view file if desired
 
     page_meta = {
         "Dashboard":   ("🏠 Dashboard",   subject),
