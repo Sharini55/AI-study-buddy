@@ -600,6 +600,7 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             "Navigation</div>",
             unsafe_allow_html=True,
         )
+        current_page = st.session_state.get("current_page", "Dashboard")
         nav_items = [
             ("🏠", "Dashboard"),
             ("📖", "Study Guide"),
@@ -608,26 +609,15 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             ("⚙️", "Settings"),
         ]
         for icon, label in nav_items:
-            active_nav = st.session_state.get("active_nav", "Dashboard")
-            is_active = active_nav == label
-            bg = "#ABC270" if is_active else "transparent"
-            color = "#FFFFFF" if is_active else "#242B18"
-            if st.button(
-                f"{icon}  {label}",
-                key=f"nav_{label}",
-                use_container_width=True,
-            ):
+            if st.button(f"{icon}  {label}", key=f"nav_{label}", use_container_width=True):
                 if label == "Settings":
                     st.session_state["_nav_settings_open"] = not st.session_state.get("_nav_settings_open", False)
                 elif label == "Saved Guides":
-                    pass  # handled by saved guides section below
-                elif label == "Dashboard":
+                    pass  # list is rendered below; no page switch needed
+                else:
+                    st.session_state["current_page"] = label
                     st.session_state["viewing_profile"] = False
                     st.session_state["viewing_guide"] = None
-                    st.session_state["active_nav"] = label
-                    st.rerun()
-                else:
-                    st.session_state["active_nav"] = label
                     st.rerun()
 
         # ── Workspaces ─────────────────────────────────────────────────────
@@ -957,7 +947,8 @@ def main() -> None:
     current_user = st.session_state["username"]
     is_admin = st.session_state.get("is_admin", False)
 
-    # 2. Session state bootstrap
+    # 2. Session state bootstrap — current_page is session-only, never persisted
+    st.session_state.setdefault("current_page", "Dashboard")
     st.session_state.setdefault("saved_guides", [])
     st.session_state.setdefault("viewing_guide", None)
     st.session_state.setdefault("admin_view", False)
@@ -999,24 +990,35 @@ def main() -> None:
             return
         st.session_state["viewing_guide"] = None
 
-    # 7. Main workspace UI
+    # 7. Main workspace — page-based routing
     workspace = st.session_state["workspaces"][subject]
-
-    st.title(APP_TITLE)
-    st.caption("Warm, focused study workspaces for every course and major.")
-    st.subheader(subject)
+    current_page = st.session_state.get("current_page", "Dashboard")
 
     from tabs.ingest import render_ingest_tab
     from tabs.study import render_study_tab
     from tabs.quiz import render_quiz_tab
 
-    ingest_tab, guide_tab, quiz_tab = st.tabs(["Ingest Material", "Study Guide", "Interactive Quiz"])
+    # Page header
+    page_meta = {
+        "Dashboard":   ("🏠 Dashboard",   subject),
+        "Study Guide": ("📖 Study Guide",  subject),
+        "Quiz":        ("✏️ Interactive Quiz", subject),
+    }
+    title, caption = page_meta.get(current_page, ("🏠 Dashboard", subject))
+    st.markdown(
+        f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:800;"
+        f"color:#242B18;margin-bottom:0.1rem;'>{title}</h2>"
+        f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
+        f"font-size:0.95rem;margin-top:0;'>{caption}</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
 
-    with ingest_tab:
+    if current_page == "Dashboard":
         render_ingest_tab(subject, workspace, api_key)
-    with guide_tab:
+    elif current_page == "Study Guide":
         render_study_tab(api_key, subject, workspace, study_mode)
-    with quiz_tab:
+    elif current_page == "Quiz":
         render_quiz_tab(api_key, subject, workspace)
 
     if st.session_state["is_dirty"]:
