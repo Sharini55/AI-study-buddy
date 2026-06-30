@@ -63,9 +63,17 @@ def apply_theme() -> None:
             border: none !important;
             box-shadow: none !important;
         }
-        [data-testid="stToolbar"],
+        /* DO NOT hide stToolbar — stExpandSidebarButton lives inside it.
+           Hiding the toolbar hides the expand button, making the sidebar
+           permanently unrecoverable once collapsed. */
+        [data-testid="stToolbar"] {
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        /* Hide only the specific sub-elements we don't want */
         [data-testid="stDecoration"],
         [data-testid="stStatusWidget"],
+        [data-testid="stToolbarActionButtonTooltip"],
         #MainMenu,
         footer { display: none !important; }
 
@@ -389,41 +397,24 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar expand button override container ────────────────────────
-           Guarantees that if a user collapses the sidebar, the control toggle tab 
-           is rendered instantly as a prominent high-contrast yellow pill. ── */
-        [data-testid="stExpandSidebarButton"],
-        [data-testid="stExpandSidebarButton"] button,
-        [data-testid="collapsedControl"] {
-            display:       flex !important;
-            visibility:    visible !important;
-            opacity:       1 !important;
-            position:      fixed !important;
-            top:           3.5rem !important;
-            left:          0 !important;
-            z-index:       99999 !important;
-            background:    #FEC868 !important; /* Explicit High-Contrast Yellow */
-            border-radius: 0 12px 12px 0 !important;
-            padding:       10px 14px !important;
-            box-shadow:    3px 2px 12px rgba(0,0,0,0.2) !important;
+        /* ── Sidebar expand button (shown in toolbar when sidebar is collapsed) ── */
+        [data-testid="stExpandSidebarButton"] button {
+            background:    var(--yellow) !important;
+            border-radius: 8px !important;
             border:        none !important;
+            padding:       6px 8px !important;
             cursor:        pointer !important;
         }
-        [data-testid="stExpandSidebarButton"] svg,
-        [data-testid="collapsedControl"] svg {
-            fill:   #242B18 !important;
-            color:  #242B18 !important;
-            width:  24px !important;
-            height: 24px !important;
+        [data-testid="stExpandSidebarButton"] svg {
+            fill:   var(--ink) !important;
+            width:  22px !important;
+            height: 22px !important;
         }
 
         /* ── Sidebar collapse button (inside the sidebar) ── */
-        [data-testid="stSidebarCollapseButton"],
         [data-testid="stSidebarCollapseButton"] button {
-            display:    flex !important;
-            visibility: visible !important;
-            opacity:    1 !important;
-            color:      var(--ink) !important;
+            background: transparent !important;
+            border:     none !important;
         }
         [data-testid="stSidebarCollapseButton"] svg {
             fill: var(--ink) !important;
