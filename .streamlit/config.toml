@@ -5,8 +5,5 @@ secondaryBackgroundColor = "#ECF1E2"
 textColor = "#242B18"
 font = "sans serif"
 
-[ui]
-sidebarNavVisibility = "visible"
-
 [browser]
 gatherUsageStats = false

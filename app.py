@@ -389,15 +389,62 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar expand/collapse arrow ── */
+        /* ── Sidebar expand/collapse toggle — target all known Streamlit testids ── */
+        /* Old (≤1.29) */
         [data-testid="collapsedControl"],
-        [data-testid="collapsedControl"] button {
-            display: flex !important;
-            visibility: visible !important;
-            color: var(--ink) !important;
+        [data-testid="collapsedControl"] button,
+        /* Current (1.30+) */
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stSidebarCollapsedControl"] button {
+            display:    flex       !important;
+            visibility: visible    !important;
+            opacity:    1          !important;
+            position:   fixed      !important;
+            top:        1rem       !important;
+            left:       0.4rem     !important;
+            z-index:    99999      !important;
+            background: var(--yellow) !important;
+            border-radius: 0 8px 8px 0 !important;
+            padding: 6px 8px !important;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.18) !important;
         }
-        [data-testid="collapsedControl"] svg { fill: var(--ink) !important; }
+        [data-testid="collapsedControl"] svg,
+        [data-testid="stSidebarCollapsedControl"] svg {
+            fill:   var(--ink) !important;
+            width:  20px !important;
+            height: 20px !important;
+        }
+
+        /* Sidebar itself — never let it go off-canvas silently */
+        section[data-testid="stSidebar"] {
+            min-width: 0 !important;   /* allow collapsing */
+            transition: width 0.25s ease, transform 0.25s ease !important;
+        }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Force sidebar to start expanded every load by clearing Streamlit's
+    # localStorage collapse-state key (written by the browser, not the server).
+    st.markdown(
+        """
+        <script>
+        (function() {
+            try {
+                // Streamlit stores sidebar collapsed state in localStorage;
+                // key names have changed across versions — wipe all variants.
+                var toRemove = [];
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (k && k.toLowerCase().indexOf('sidebar') !== -1) {
+                        toRemove.push(k);
+                    }
+                }
+                toRemove.forEach(function(k) { localStorage.removeItem(k); });
+            } catch(e) {}
+        })();
+        </script>
         """,
         unsafe_allow_html=True,
     )
