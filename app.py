@@ -389,59 +389,63 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar expand/collapse toggle — target all known Streamlit testids ── */
-        /* Old (≤1.29) */
-        [data-testid="collapsedControl"],
-        [data-testid="collapsedControl"] button,
-        /* Current (1.30+) */
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="stSidebarCollapsedControl"] button {
-            display:    flex       !important;
-            visibility: visible    !important;
-            opacity:    1          !important;
-            position:   fixed      !important;
-            top:        1rem       !important;
-            left:       0.4rem     !important;
-            z-index:    99999      !important;
-            background: var(--yellow) !important;
-            border-radius: 0 8px 8px 0 !important;
-            padding: 6px 8px !important;
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.18) !important;
+        /* ── Sidebar expand button (Streamlit 1.58) ────────────────────────
+           When the sidebar is collapsed, Streamlit renders a button with
+           data-testid="stExpandSidebarButton" at the left viewport edge.
+           Make it a prominent yellow pill so it can never be missed.       ── */
+        [data-testid="stExpandSidebarButton"],
+        [data-testid="stExpandSidebarButton"] button {
+            display:       flex !important;
+            visibility:    visible !important;
+            opacity:       1 !important;
+            position:      fixed !important;
+            top:           4.5rem !important;
+            left:          0 !important;
+            z-index:       99999 !important;
+            background:    var(--yellow) !important;
+            border-radius: 0 10px 10px 0 !important;
+            padding:       8px 10px !important;
+            box-shadow:    3px 2px 10px rgba(0,0,0,0.22) !important;
+            border:        none !important;
+            cursor:        pointer !important;
         }
-        [data-testid="collapsedControl"] svg,
-        [data-testid="stSidebarCollapsedControl"] svg {
+        [data-testid="stExpandSidebarButton"] svg {
             fill:   var(--ink) !important;
-            width:  20px !important;
-            height: 20px !important;
+            width:  22px !important;
+            height: 22px !important;
         }
 
-        /* Sidebar itself — never let it go off-canvas silently */
+        /* ── Sidebar collapse button (inside the sidebar) ── */
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] button {
+            display:    flex !important;
+            visibility: visible !important;
+            opacity:    1 !important;
+            color:      var(--ink) !important;
+        }
+        [data-testid="stSidebarCollapseButton"] svg {
+            fill: var(--ink) !important;
+        }
+
+        /* Sidebar container — smooth slide animation */
         section[data-testid="stSidebar"] {
-            min-width: 0 !important;   /* allow collapsing */
-            transition: width 0.25s ease, transform 0.25s ease !important;
+            min-width: 0 !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # Force sidebar to start expanded every load by clearing Streamlit's
-    # localStorage collapse-state key (written by the browser, not the server).
+    # Reset the sidebar's persisted-collapse state on every load.
+    # Streamlit 1.58 stores the state under "sidebarNavState" in localStorage.
+    # By removing it before Streamlit reads it, initial_sidebar_state="expanded"
+    # always wins and the sidebar opens on every fresh load.
     st.markdown(
         """
         <script>
         (function() {
             try {
-                // Streamlit stores sidebar collapsed state in localStorage;
-                // key names have changed across versions — wipe all variants.
-                var toRemove = [];
-                for (var i = 0; i < localStorage.length; i++) {
-                    var k = localStorage.key(i);
-                    if (k && k.toLowerCase().indexOf('sidebar') !== -1) {
-                        toRemove.push(k);
-                    }
-                }
-                toRemove.forEach(function(k) { localStorage.removeItem(k); });
+                localStorage.removeItem("sidebarNavState");
             } catch(e) {}
         })();
         </script>
