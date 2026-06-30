@@ -192,7 +192,7 @@ def apply_theme() -> None:
         [data-testid="stBaseButton-secondary"] p,
         [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
 
-        /* ── File uploader — green dashed border, green Browse button ── */
+        /* ── File uploader ── */
         [data-testid="stFileUploader"] {
             background: #FFFFFF !important;
             border: 2.5px dashed var(--green) !important;
@@ -389,30 +389,32 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar expand button (Streamlit 1.58) ────────────────────────
-           When the sidebar is collapsed, Streamlit renders a button with
-           data-testid="stExpandSidebarButton" at the left viewport edge.
-           Make it a prominent yellow pill so it can never be missed.       ── */
+        /* ── Sidebar expand button override container ────────────────────────
+           Guarantees that if a user collapses the sidebar, the control toggle tab 
+           is rendered instantly as a prominent high-contrast yellow pill. ── */
         [data-testid="stExpandSidebarButton"],
-        [data-testid="stExpandSidebarButton"] button {
+        [data-testid="stExpandSidebarButton"] button,
+        [data-testid="collapsedControl"] {
             display:       flex !important;
             visibility:    visible !important;
             opacity:       1 !important;
             position:      fixed !important;
-            top:           4.5rem !important;
+            top:           3.5rem !important;
             left:          0 !important;
             z-index:       99999 !important;
-            background:    var(--yellow) !important;
-            border-radius: 0 10px 10px 0 !important;
-            padding:       8px 10px !important;
-            box-shadow:    3px 2px 10px rgba(0,0,0,0.22) !important;
+            background:    #FEC868 !important; /* Explicit High-Contrast Yellow */
+            border-radius: 0 12px 12px 0 !important;
+            padding:       10px 14px !important;
+            box-shadow:    3px 2px 12px rgba(0,0,0,0.2) !important;
             border:        none !important;
             cursor:        pointer !important;
         }
-        [data-testid="stExpandSidebarButton"] svg {
-            fill:   var(--ink) !important;
-            width:  22px !important;
-            height: 22px !important;
+        [data-testid="stExpandSidebarButton"] svg,
+        [data-testid="collapsedControl"] svg {
+            fill:   #242B18 !important;
+            color:  #242B18 !important;
+            width:  24px !important;
+            height: 24px !important;
         }
 
         /* ── Sidebar collapse button (inside the sidebar) ── */
@@ -427,28 +429,10 @@ def apply_theme() -> None:
             fill: var(--ink) !important;
         }
 
-        /* Sidebar container — smooth slide animation */
         section[data-testid="stSidebar"] {
             min-width: 0 !important;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Reset the sidebar's persisted-collapse state on every load.
-    # Streamlit 1.58 stores the state under "sidebarNavState" in localStorage.
-    # By removing it before Streamlit reads it, initial_sidebar_state="expanded"
-    # always wins and the sidebar opens on every fresh load.
-    st.markdown(
-        """
-        <script>
-        (function() {
-            try {
-                localStorage.removeItem("sidebarNavState");
-            } catch(e) {}
-        })();
-        </script>
         """,
         unsafe_allow_html=True,
     )
@@ -459,10 +443,6 @@ def apply_theme() -> None:
 # ---------------------------------------------------------------------------
 
 def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
-    """Queries SQLite and marshals database rows back into Streamlit workspace dictionary.
-
-    Returns (workspaces_dict, saved_guides) so the caller can set both in session state.
-    """
     db: Session = SessionLocal()
     workspaces_dict = {}
     saved_guides: list = []
@@ -473,7 +453,6 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                 ws_data = blank_workspace()
                 ws_data["id"] = ws.id
                 
-                # Load indexed files
                 for file_row in ws.files:
                     images_list = []
                     for img_row in file_row.images:
@@ -494,7 +473,6 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                 
                 refresh_processed_text(ws_data)
                 
-                # Load all saved guides; populate sidebar list and restore active guide
                 all_guides = db.query(StudyGuide).filter(
                     StudyGuide.workspace_id == ws.id
                 ).order_by(StudyGuide.created_at.desc()).all()
@@ -509,7 +487,6 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                         "saved_at": g.created_at.strftime("%b %d, %H:%M") if g.created_at else "",
                     })
                 
-                # Load quiz historical entries
                 for quiz_row in ws.quizzes:
                     try:
                         questions = json.loads(quiz_row.quiz_json)
@@ -534,7 +511,6 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
 
 
 def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dict):
-    """Commits active memory modifications (guides, scores, uploads) back to SQLite tables."""
     db: Session = SessionLocal()
     try:
         ws_row = db.query(Workspace).filter(Workspace.user_id == username, Workspace.subject_name == subject_name).first()
@@ -546,12 +522,10 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
             
         ws_memory["id"] = ws_row.id
         
-        # Sync files
         for file_item in ws_memory.get("files", []):
             content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
             existing_file = db.query(SourceFile).filter(SourceFile.workspace_id == ws_row.id, SourceFile.file_hash == content_hash).first()
             if not existing_file:
-                
                 new_file = SourceFile(
                     workspace_id=ws_row.id,
                     name=file_item["name"],
@@ -574,7 +548,6 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                     db.add(new_img)
                 db.commit()
                 
-        # Sync all saved guides for this workspace, deduped by guide_hash
         for guide in st.session_state.get("saved_guides", []):
             if guide.get("subject") != subject_name:
                 continue
@@ -591,7 +564,6 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                 ))
         db.commit()
             
-        # Sync quiz history entries
         stored_attempts_count = db.query(QuizAttempt).filter(QuizAttempt.workspace_id == ws_row.id).count()
         memory_history = ws_memory.get("quiz_history", [])
         if len(memory_history) > stored_attempts_count:
@@ -651,10 +623,10 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             "Navigation</div>",
             unsafe_allow_html=True,
         )
-        current_page = st.session_state.get("current_page", "Dashboard")
+        
         nav_items = [
             ("🏠", "Dashboard"),
-            ("📖", "Study Guide"),
+            ("📖", "Study guide"),
             ("✏️", "Quiz"),
             ("📚", "Saved Guides"),
             ("⚙️", "Settings"),
@@ -664,7 +636,10 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 if label == "Settings":
                     st.session_state["_nav_settings_open"] = not st.session_state.get("_nav_settings_open", False)
                 elif label == "Saved Guides":
-                    pass  # list is rendered below; no page switch needed
+                    st.session_state["current_page"] = "Saved Guides"
+                    st.session_state["viewing_profile"] = False
+                    st.session_state["viewing_guide"] = None
+                    st.rerun()
                 else:
                     st.session_state["current_page"] = label
                     st.session_state["viewing_profile"] = False
@@ -802,7 +777,6 @@ def render_profile_page(current_user: str) -> None:
     st.caption(f"Logged in as **{current_user}**")
     st.divider()
 
-    # ── Account stats ──────────────────────────────────────────────────────
     workspaces = st.session_state.get("workspaces", {})
     ws_count    = len(workspaces)
     guide_count = sum(1 for ws in workspaces.values() if ws.get("generated_notes"))
@@ -814,7 +788,6 @@ def render_profile_page(current_user: str) -> None:
     c3.metric("Quizzes Taken", quiz_count)
     st.divider()
 
-    # ── Change password ────────────────────────────────────────────────────
     st.subheader("🔑 Change Password")
     with st.form("change_password_form"):
         current_pw = st.text_input("Current Password", type="password")
@@ -853,7 +826,6 @@ def render_profile_page(current_user: str) -> None:
 
     st.divider()
 
-    # ── Danger zone ────────────────────────────────────────────────────────
     st.subheader("⚠️ Danger Zone")
     st.caption("These actions are permanent and cannot be undone.")
 
@@ -942,12 +914,13 @@ def render_admin_dashboard(current_user: str) -> None:
                             with col1:
                                 st.caption(f"{report.stat().st_size // 1024 + 1} KB")
                             with col2:
+                                u_key = f"dl_metrics_{uname}"
                                 st.download_button(
                                     "⬇ Download",
                                     data=report.read_bytes(),
                                     file_name=f"{uname}_metrics.md",
                                     mime="text/markdown",
-                                    key=f"dl_metrics_{uname}",
+                                    key=u_key,
                                 )
                             preview = report.read_text(encoding="utf-8")
                             st.markdown(preview[:4000] + ("\n\n_— download for full report —_" if len(preview) > 4000 else ""))
@@ -990,7 +963,6 @@ def main() -> None:
     init_auth_session_state()
     apply_theme()
 
-    # 1. Auth gate
     if not st.session_state["authenticated"]:
         render_login_signup_ui()
         st.stop()
@@ -998,7 +970,6 @@ def main() -> None:
     current_user = st.session_state["username"]
     is_admin = st.session_state.get("is_admin", False)
 
-    # 2. Session state bootstrap — current_page is session-only, never persisted
     st.session_state.setdefault("current_page", "Dashboard")
     st.session_state.setdefault("saved_guides", [])
     st.session_state.setdefault("viewing_guide", None)
@@ -1006,7 +977,6 @@ def main() -> None:
     st.session_state.setdefault("viewing_profile", False)
     st.session_state.setdefault("is_dirty", False)
 
-    # 3. Load workspaces from DB on first run
     if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
         loaded, loaded_guides = load_user_workspaces_from_db(current_user)
         if loaded:
@@ -1021,17 +991,14 @@ def main() -> None:
 
     subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin)
 
-    # 4. Profile page
     if st.session_state.get("viewing_profile"):
         render_profile_page(current_user)
         return
 
-    # 5. Admin dashboard
     if is_admin and st.session_state.get("admin_view"):
         render_admin_dashboard(current_user)
         return
 
-    # 6. Saved guide viewer
     viewing_id = st.session_state.get("viewing_guide")
     if viewing_id is not None:
         saved = st.session_state.get("saved_guides", [])
@@ -1041,19 +1008,19 @@ def main() -> None:
             return
         st.session_state["viewing_guide"] = None
 
-    # 7. Main workspace — page-based routing
     workspace = st.session_state["workspaces"][subject]
     current_page = st.session_state.get("current_page", "Dashboard")
 
     from tabs.ingest import render_ingest_tab
     from tabs.study import render_study_tab
     from tabs.quiz import render_quiz_tab
+    from tabs.saved_guides_view import render_saved_guides_tab  # Optional fallback view file if desired
 
-    # Page header
     page_meta = {
         "Dashboard":   ("🏠 Dashboard",   subject),
-        "Study Guide": ("📖 Study Guide",  subject),
+        "Study guide": ("📖 Study Guide",  subject),
         "Quiz":        ("✏️ Interactive Quiz", subject),
+        "Saved Guides":("📚 Saved Guides Catalog", subject)
     }
     title, caption = page_meta.get(current_page, ("🏠 Dashboard", subject))
     st.markdown(
@@ -1065,12 +1032,16 @@ def main() -> None:
     )
     st.divider()
 
+    # Absolute Separate Page Canvas Logic routing instead of shared multi-tabs
     if current_page == "Dashboard":
         render_ingest_tab(subject, workspace, api_key)
-    elif current_page == "Study Guide":
+    elif current_page == "Study guide":
         render_study_tab(api_key, subject, workspace, study_mode)
     elif current_page == "Quiz":
         render_quiz_tab(api_key, subject, workspace)
+    elif current_page == "Saved Guides":
+        # Render inline overview if clicked via menu link
+        st.info("Select a guide from the left sidebar section 'Saved Guides' to view its detailed layout content canvas.")
 
     if st.session_state["is_dirty"]:
         save_active_workspace_to_db(current_user, subject, workspace)
