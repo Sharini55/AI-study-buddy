@@ -108,6 +108,19 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
             type="primary",
             key=f"dl_guide_{wid}_{guide_hash}",
         )
+        st.markdown(
+            "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;border-radius:18px;"
+            "padding:1.5rem 1.75rem;margin-top:1rem;'>",
+            unsafe_allow_html=True,
+        )
         render_guide(workspace["generated_notes"])
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.caption("Generate a study guide after indexing material.")
+        st.markdown(
+            "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;border-radius:18px;"
+            "padding:2rem;text-align:center;margin-top:1rem;'>"
+            "<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;font-size:1rem;'>"
+            "Generate a study guide after indexing material.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )

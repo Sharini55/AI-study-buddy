@@ -1,8 +1,9 @@
 [theme]
-primaryColor = "#d1a13b"
-backgroundColor = "#f9f6f0"
-secondaryBackgroundColor = "#f1eae0"
-textColor = "#1e1e1e"
+primaryColor = "#FEC868"
+backgroundColor = "#F5F8EE"
+secondaryBackgroundColor = "#ECF1E2"
+textColor = "#242B18"
+font = "sans serif"
 
 [ui]
 sidebarNavVisibility = "visible"

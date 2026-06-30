@@ -16,8 +16,10 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     left, right = st.columns([1, 1], gap="large")
     with left:
         uploaded_files = st.file_uploader(
-            "Upload source files", type=SUPPORTED_UPLOADS, accept_multiple_files=True,
-            key=f"uploader_{subject}", help="Accepted: PDF, PPTX, JPG, PNG.",
+            "Drag & drop files here, or click to browse (PDF, PPTX, JPG, PNG)",
+            type=SUPPORTED_UPLOADS,
+            accept_multiple_files=True,
+            key=f"uploader_{subject}",
         )
     with right:
         pasted_text = st.text_area(
@@ -64,6 +66,5 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
                 st.rerun()
 
-    workspace_summary(workspace)
     for warning in sorted(set(workspace.get("visual_warnings", []))):
         st.warning(warning)

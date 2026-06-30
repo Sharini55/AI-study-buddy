@@ -16,7 +16,7 @@ from utils.persistence import (
 from utils.files import blank_workspace, refresh_processed_text
 from utils.guide import render_guide
 
-APP_TITLE = "SunDevil AI"
+APP_TITLE = "AI Study Buddy"
 
 
 # ---------------------------------------------------------------------------
@@ -568,20 +568,79 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
 
 def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str, str, str]:
     with st.sidebar:
+        # ── User Profile Badge ─────────────────────────────────────────────
+        st.markdown(
+            f"""
+            <div style="background:#ABC270;border-radius:12px;padding:10px 14px;
+                        margin-bottom:0.5rem;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:1.5rem;">👤</span>
+                <div>
+                    <div style="font-weight:800;font-size:1rem;color:#FFFFFF;
+                                font-family:'Truculenta',sans-serif;">{username}</div>
+                    <div style="font-size:0.75rem;color:#E8F4D0;
+                                font-family:'Truculenta',sans-serif;">Student</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         if is_admin:
             in_admin = st.session_state.get("admin_view", False)
             label = "← Back to Study" if in_admin else "🛠 Admin Dashboard"
             if st.button(label, use_container_width=True):
                 st.session_state["admin_view"] = not in_admin
                 st.rerun()
-            st.divider()
 
-        st.markdown(f"🔬 **Student Profile:** `{username}`")
-        st.divider()
-        st.header("Workspace")
-        
-        new_subject = st.text_input("New Subject Name", placeholder="CSE 230, Physics, MAT 243")
-        if st.button("Create Workspace", type="primary", use_container_width=True):
+        # ── Navigation ─────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
+            "letter-spacing:1.5px;text-transform:uppercase;"
+            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
+            "Navigation</div>",
+            unsafe_allow_html=True,
+        )
+        nav_items = [
+            ("🏠", "Dashboard"),
+            ("📖", "Study Guide"),
+            ("✏️", "Quiz"),
+            ("📚", "Saved Guides"),
+            ("⚙️", "Settings"),
+        ]
+        for icon, label in nav_items:
+            active_nav = st.session_state.get("active_nav", "Dashboard")
+            is_active = active_nav == label
+            bg = "#ABC270" if is_active else "transparent"
+            color = "#FFFFFF" if is_active else "#242B18"
+            if st.button(
+                f"{icon}  {label}",
+                key=f"nav_{label}",
+                use_container_width=True,
+            ):
+                if label == "Settings":
+                    st.session_state["_nav_settings_open"] = not st.session_state.get("_nav_settings_open", False)
+                elif label == "Saved Guides":
+                    pass  # handled by saved guides section below
+                elif label == "Dashboard":
+                    st.session_state["viewing_profile"] = False
+                    st.session_state["viewing_guide"] = None
+                    st.session_state["active_nav"] = label
+                    st.rerun()
+                else:
+                    st.session_state["active_nav"] = label
+                    st.rerun()
+
+        # ── Workspaces ─────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
+            "letter-spacing:1.5px;text-transform:uppercase;"
+            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
+            "Workspaces</div>",
+            unsafe_allow_html=True,
+        )
+        new_subject = st.text_input("New Subject Name", placeholder="CSE 230, Physics, MAT 243",
+                                    label_visibility="collapsed")
+        if st.button("＋ Create Workspace", type="primary", use_container_width=True):
             subject = new_subject.strip()
             if subject:
                 st.session_state["workspaces"].setdefault(subject, blank_workspace())
@@ -598,10 +657,11 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             "Switch Workspace", subjects,
             index=subjects.index(active),
             key="workspace_selector",
+            label_visibility="collapsed",
         )
         st.session_state["active_workspace"] = selected
 
-        if st.button("Delete Workspace", type="primary", use_container_width=True):
+        if st.button("🗑 Delete Workspace", use_container_width=True):
             if len(st.session_state["workspaces"]) == 1:
                 st.warning("Create another workspace before deleting the last one.")
             else:
@@ -612,20 +672,50 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
                 st.rerun()
 
-        st.divider()
-        with st.expander("⚙ Settings"):
-            api_key = st.text_input("Gemini API Key", value="", type="password",
-                                    placeholder="Paste your key here…")
+        # ── Study Modes ────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
+            "letter-spacing:1.5px;text-transform:uppercase;"
+            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
+            "Study Modes</div>",
+            unsafe_allow_html=True,
+        )
+        study_mode = st.radio(
+            "Study Mode",
+            ["Deep Dive", "Cram Mode"],
+            label_visibility="collapsed",
+        )
+
+        # ── Settings (shown when Settings nav is toggled) ──────────────────
+        if st.session_state.get("_nav_settings_open"):
+            st.markdown(
+                "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
+                "letter-spacing:1.5px;text-transform:uppercase;"
+                "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
+                "Settings</div>",
+                unsafe_allow_html=True,
+            )
             from utils.gemini import GEMINI_MODEL
             st.caption(f"Model: `{GEMINI_MODEL}`")
-
-        study_mode = st.radio("Study Mode", ["Deep Dive", "Cram Mode"])
+        api_key = st.text_input(
+            "Gemini API Key",
+            value="",
+            type="password",
+            placeholder="Paste your Gemini API key here…",
+            label_visibility="visible" if st.session_state.get("_nav_settings_open") else "collapsed",
+            key="_api_key_input",
+        )
 
         # ── Saved Guides ──────────────────────────────────────────────────
         saved = st.session_state.get("saved_guides", [])
         if saved:
-            st.divider()
-            st.markdown("**📚 Saved Guides**")
+            st.markdown(
+                "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
+                "letter-spacing:1.5px;text-transform:uppercase;"
+                "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
+                "Saved Guides</div>",
+                unsafe_allow_html=True,
+            )
             for guide in saved:
                 guide_id = guide["id"]
                 col_btn, col_del = st.columns([5, 1])

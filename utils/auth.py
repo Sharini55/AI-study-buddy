@@ -148,7 +148,7 @@ def render_login_signup_ui():
         <div style="text-align:center; margin-top:2rem; margin-bottom:2rem;">
             <h1 style="color:#ABC270; font-size:2.8rem; font-weight:800;
                        font-family:'Truculenta',sans-serif; letter-spacing:-1px;
-                       margin-bottom:0.2rem;">🔱 SunDevil AI</h1>
+                       margin-bottom:0.2rem;">📚 AI Study Buddy</h1>
             <p style="color:#5C6A48; font-size:1.15rem; font-family:'Truculenta',sans-serif;">
                 Active-Recall Study Workspaces
             </p>
@@ -166,7 +166,7 @@ def render_login_signup_ui():
             with st.form("login_form", clear_on_submit=False):
                 user_login = st.text_input("Username", placeholder="your username")
                 pass_login = st.text_input("Password", type="password", placeholder="••••••••")
-                if st.form_submit_button("Log In", use_container_width=True):
+                if st.form_submit_button("Log In", use_container_width=True, type="primary"):
                     success, msg = login_user(user_login, pass_login)
                     if success:
                         st.toast(msg, icon="🔥")
