@@ -187,7 +187,7 @@ def render_login_signup_ui():
                     placeholder="Min 8 chars · 1 number · 1 special character",
                     help="Requirements: 8+ characters, at least one number, at least one special character (!@#$% etc.)"
                 )
-                if st.form_submit_button("Create Account", use_container_width=True):
+                if st.form_submit_button("Create Account", use_container_width=True, type="primary"):
                     success, msg = register_user(user_signup, pass_signup)
                     if success:
                         st.success(msg)

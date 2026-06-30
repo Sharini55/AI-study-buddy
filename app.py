@@ -332,6 +332,43 @@ def apply_theme() -> None:
             padding: 1.5rem 1.5rem 0.5rem;
         }
 
+        /* ── Form labels — force dark so they're visible on white form bg ── */
+        [data-testid="stForm"] label,
+        [data-testid="stForm"] [data-testid="stWidgetLabel"],
+        [data-testid="stForm"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stForm"] [data-testid="stWidgetLabel"] label {
+            color: var(--ink) !important;
+        }
+
+        /* ── Form submit buttons — green fill, white text ── */
+        [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"],
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] {
+            background: var(--green) !important;
+            border-color: var(--green) !important;
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+            border-radius: 999px !important;
+        }
+        [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"] p,
+        [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"] span,
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] p,
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] span {
+            color: #FFFFFF !important;
+        }
+        [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"]:hover,
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"]:hover {
+            background: var(--green-dark) !important;
+            border-color: var(--green-dark) !important;
+        }
+
+        /* ── Metric cards — force dark text (profile/settings page) ── */
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricLabel"] label,
+        [data-testid="stMetricLabel"] p,
+        [data-testid="stMetricValue"],
+        [data-testid="stMetricValue"] div,
+        [data-testid="stMetricDelta"] { color: var(--ink) !important; }
+
         /* ── Alert components — force high-contrast text regardless of bg colour ── */
         div[data-testid="stAlert"] {
             border-radius: 14px !important;
@@ -1166,7 +1203,7 @@ def main() -> None:
         }
         title, caption = page_meta.get(current_page, ("🏠 Dashboard", subject))
         st.markdown(
-            f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:800;"
+            f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:1000;"
             f"color:#242B18;margin-bottom:0.1rem;'>{title}</h2>"
             f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
             f"font-size:0.95rem;margin-top:0;'>{caption}</p>",
