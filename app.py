@@ -89,24 +89,43 @@ def apply_theme() -> None:
         }
         [data-testid="stSidebar"] * { color: var(--ink) !important; letter-spacing: 0; }
 
-        /* Sidebar buttons — yellow primary, orange hover */
-        [data-testid="stSidebar"] .stButton > button {
-            background: var(--yellow) !important;
-            border: 1.5px solid var(--yellow) !important;
-            color: var(--ink) !important;
-            border-radius: 999px !important;
-            font-weight: 700 !important;
-            font-family: 'Truculenta', sans-serif !important;
-            transition: background 0.15s, border-color 0.15s;
+        /* Sidebar secondary buttons — transparent nav items (inactive) */
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
+        [data-testid="stSidebar"] [data-testid="baseButton-secondary"] {
+            background:       transparent !important;
+            border:           none !important;
+            border-radius:    10px !important;
+            justify-content:  flex-start !important;
+            font-weight:      600 !important;
+            color:            var(--ink) !important;
+            padding:          9px 12px !important;
+            font-family:      'Truculenta', sans-serif !important;
+            transition:       background 0.12s;
         }
-        [data-testid="stSidebar"] .stButton > button *,
-        [data-testid="stSidebar"] .stButton > button p,
-        [data-testid="stSidebar"] .stButton > button span { color: var(--ink) !important; }
-        [data-testid="stSidebar"] .stButton > button:hover,
-        [data-testid="stSidebar"] .stButton > button:focus {
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover,
+        [data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover {
+            background: rgba(254,200,104,0.28) !important;
+        }
+        /* Sidebar primary buttons — active nav / workspace pill (yellow) */
+        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"],
+        [data-testid="stSidebar"] [data-testid="baseButton-primary"] {
+            background:       var(--yellow) !important;
+            border:           none !important;
+            border-radius:    10px !important;
+            justify-content:  flex-start !important;
+            font-weight:      700 !important;
+            color:            var(--ink) !important;
+            padding:          9px 12px !important;
+            font-family:      'Truculenta', sans-serif !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"]:hover,
+        [data-testid="stSidebar"] [data-testid="baseButton-primary"]:hover {
             background: var(--orange) !important;
-            border-color: var(--orange) !important;
         }
+        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] p,
+        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] span,
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] p,
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
 
         /* ── Headings ── */
         h1, h2, h3, h4, h5, h6 {
@@ -313,11 +332,18 @@ def apply_theme() -> None:
             padding: 1.5rem 1.5rem 0.5rem;
         }
 
-        /* ── Alert components ── */
+        /* ── Alert components — force high-contrast text regardless of bg colour ── */
         div[data-testid="stAlert"] {
-            border-radius: 14px;
-            color: var(--ink);
+            border-radius: 14px !important;
             font-family: 'Truculenta', sans-serif !important;
+        }
+        div[data-testid="stAlert"],
+        div[data-testid="stAlert"] p,
+        div[data-testid="stAlert"] span,
+        div[data-testid="stAlert"] li,
+        div[data-testid="stAlert"] a,
+        div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] {
+            color: var(--ink) !important;
         }
 
         /* ── Progress bar — green fill ── */
@@ -357,13 +383,16 @@ def apply_theme() -> None:
             border-color: var(--green) !important;
         }
 
-        /* ── Username badge in sidebar — green pill ── */
-        [data-testid="stSidebar"] code {
-            background: var(--green) !important;
-            color: #FFFFFF !important;
-            border-radius: 8px !important;
-            padding: 3px 10px !important;
-            font-weight: 700 !important;
+        /* ── Sidebar section label helper ── */
+        .sb-section-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--muted) !important;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            font-family: 'Truculenta', sans-serif;
+            margin: 14px 0 4px;
+            padding-left: 2px;
         }
 
         /* ── Dataframe table ── */
@@ -397,27 +426,48 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar expand button (shown in toolbar when sidebar is collapsed) ── */
-        [data-testid="stExpandSidebarButton"] button {
-            background:    var(--yellow) !important;
-            border-radius: 8px !important;
+        /* ── Sidebar collapse button (inside sidebar) → show « glyph ── */
+        [data-testid="stSidebarCollapseButton"] button {
+            background:    transparent !important;
             border:        none !important;
-            padding:       6px 8px !important;
             cursor:        pointer !important;
+            padding:       4px 6px !important;
         }
-        [data-testid="stExpandSidebarButton"] svg {
-            fill:   var(--ink) !important;
-            width:  22px !important;
-            height: 22px !important;
+        /* Hide the Material icon that renders as literal text */
+        [data-testid="stSidebarCollapseButton"] button svg,
+        [data-testid="stSidebarCollapseButton"] button span[data-testid="stIconMaterial"],
+        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {
+            display: none !important;
+        }
+        [data-testid="stSidebarCollapseButton"] button::after {
+            content:     "«";
+            font-size:   1.35rem;
+            font-weight: 700;
+            color:       var(--ink);
+            line-height: 1;
+            display:     block;
         }
 
-        /* ── Sidebar collapse button (inside the sidebar) ── */
-        [data-testid="stSidebarCollapseButton"] button {
-            background: transparent !important;
-            border:     none !important;
+        /* ── Sidebar expand button (in toolbar, sidebar collapsed) → show » glyph ── */
+        [data-testid="stExpandSidebarButton"] button {
+            background:    var(--yellow) !important;
+            border:        none !important;
+            border-radius: 0 10px 10px 0 !important;
+            padding:       8px 11px !important;
+            cursor:        pointer !important;
         }
-        [data-testid="stSidebarCollapseButton"] svg {
-            fill: var(--ink) !important;
+        [data-testid="stExpandSidebarButton"] button svg,
+        [data-testid="stExpandSidebarButton"] button span[data-testid="stIconMaterial"],
+        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+            display: none !important;
+        }
+        [data-testid="stExpandSidebarButton"] button::after {
+            content:     "»";
+            font-size:   1.35rem;
+            font-weight: 700;
+            color:       var(--ink);
+            line-height: 1;
+            display:     block;
         }
 
         section[data-testid="stSidebar"] {
@@ -577,22 +627,45 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
 
 
 # ---------------------------------------------------------------------------
+# Sidebar helper
+# ---------------------------------------------------------------------------
+
+def _sb_section(label: str) -> None:
+    st.markdown(
+        f'<div class="sb-section-label">{label}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Sidebar View Block (Authentication-Aware)
 # ---------------------------------------------------------------------------
 
 def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str, str, str]:
     with st.sidebar:
-        # ── User Profile Badge ─────────────────────────────────────────────
+        # ── User Profile (Figma_1: yellow circle avatar + name/username) ──
+        initial = (username[0].upper()) if username else "?"
         st.markdown(
             f"""
-            <div style="background:#ABC270;border-radius:12px;padding:10px 14px;
-                        margin-bottom:0.5rem;display:flex;align-items:center;gap:10px;">
-                <span style="font-size:1.5rem;">👤</span>
+            <div style="display:flex;align-items:center;gap:13px;
+                        padding:14px 4px 16px;
+                        border-bottom:1px solid var(--line);margin-bottom:6px;">
+                <div style="width:50px;height:50px;border-radius:50%;
+                            background:var(--yellow);flex-shrink:0;
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:1.45rem;font-weight:800;color:var(--ink);
+                            font-family:'Truculenta',sans-serif;">
+                    {initial}
+                </div>
                 <div>
-                    <div style="font-weight:800;font-size:1rem;color:#FFFFFF;
-                                font-family:'Truculenta',sans-serif;">{username}</div>
-                    <div style="font-size:0.75rem;color:#E8F4D0;
-                                font-family:'Truculenta',sans-serif;">Student</div>
+                    <div style="font-weight:800;font-size:1rem;color:var(--ink);
+                                font-family:'Truculenta',sans-serif;line-height:1.25;">
+                        {username.title()}
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--muted);
+                                font-family:'Truculenta',sans-serif;">
+                        {username}
+                    </div>
                 </div>
             </div>
             """,
@@ -601,107 +674,160 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
 
         if is_admin:
             in_admin = st.session_state.get("admin_view", False)
-            label = "← Back to Study" if in_admin else "🛠 Admin Dashboard"
-            if st.button(label, use_container_width=True):
+            lbl = "← Back to Study" if in_admin else "🛠 Admin Dashboard"
+            if st.button(lbl, use_container_width=True):
                 st.session_state["admin_view"] = not in_admin
                 st.rerun()
 
         # ── Navigation ─────────────────────────────────────────────────────
-        st.markdown(
-            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
-            "letter-spacing:1.5px;text-transform:uppercase;"
-            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
-            "Navigation</div>",
-            unsafe_allow_html=True,
-        )
-        
+        _sb_section("Navigation")
+        current_page = st.session_state.get("current_page", "Dashboard")
         nav_items = [
             ("🏠", "Dashboard"),
-            ("📖", "Study guide"),
-            ("✏️", "Quiz"),
-            ("📚", "Saved Guides"),
-            ("⚙️", "Settings"),
+            ("📄", "Study guide"),
+            ("❓", "Quiz"),
+            ("🔖", "Saved Guides"),
+            ("⚙", "Settings"),
         ]
-        for icon, label in nav_items:
-            if st.button(f"{icon}  {label}", key=f"nav_{label}", use_container_width=True):
-                if label == "Settings":
-                    st.session_state["_nav_settings_open"] = not st.session_state.get("_nav_settings_open", False)
-                elif label == "Saved Guides":
-                    st.session_state["current_page"] = "Saved Guides"
-                    st.session_state["viewing_profile"] = False
-                    st.session_state["viewing_guide"] = None
+        for icon, page in nav_items:
+            is_active = current_page == page
+            btn_type = "primary" if is_active else "secondary"
+            if st.button(
+                f"{icon}  {page}",
+                key=f"nav_{page}",
+                use_container_width=True,
+                type=btn_type,
+            ):
+                if page == "Settings":
+                    st.session_state["_nav_settings_open"] = (
+                        not st.session_state.get("_nav_settings_open", False)
+                    )
                     st.rerun()
                 else:
-                    st.session_state["current_page"] = label
+                    st.session_state["current_page"] = page
                     st.session_state["viewing_profile"] = False
                     st.session_state["viewing_guide"] = None
                     st.rerun()
 
         # ── Workspaces ─────────────────────────────────────────────────────
-        st.markdown(
-            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
-            "letter-spacing:1.5px;text-transform:uppercase;"
-            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
-            "Workspaces</div>",
-            unsafe_allow_html=True,
-        )
-        new_subject = st.text_input("New Subject Name", placeholder="CSE 230, Physics, MAT 243",
-                                    label_visibility="collapsed")
-        if st.button("＋ Create Workspace", type="primary", use_container_width=True):
-            subject = new_subject.strip()
-            if subject:
-                st.session_state["workspaces"].setdefault(subject, blank_workspace())
-                st.session_state["active_workspace"] = subject
-                save_active_workspace_to_db(username, subject, st.session_state["workspaces"][subject])
-                st.rerun()
-
+        _sb_section("Workspaces")
         subjects = list(st.session_state["workspaces"].keys())
         active = st.session_state.get("active_workspace", subjects[0])
         if active not in subjects:
             active = subjects[0]
+        selected = active
 
-        selected = st.radio(
-            "Switch Workspace", subjects,
-            index=subjects.index(active),
-            key="workspace_selector",
-            label_visibility="collapsed",
-        )
-        st.session_state["active_workspace"] = selected
-
-        if st.button("🗑 Delete Workspace", use_container_width=True):
-            if len(st.session_state["workspaces"]) == 1:
-                st.warning("Create another workspace before deleting the last one.")
-            else:
-                ws_id = st.session_state["workspaces"][selected].get("id")
-                if ws_id:
-                    delete_workspace_from_db(ws_id, owner_username=username)
-                del st.session_state["workspaces"][selected]
-                st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
+        for ws_name in subjects:
+            ws_type = "primary" if ws_name == active else "secondary"
+            if st.button(
+                f"📄  {ws_name}",
+                key=f"ws_{ws_name}",
+                use_container_width=True,
+                type=ws_type,
+            ):
+                st.session_state["active_workspace"] = ws_name
+                selected = ws_name
                 st.rerun()
 
-        # ── Study Modes ────────────────────────────────────────────────────
-        st.markdown(
-            "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
-            "letter-spacing:1.5px;text-transform:uppercase;"
-            "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
-            "Study Modes</div>",
-            unsafe_allow_html=True,
-        )
-        study_mode = st.radio(
-            "Study Mode",
-            ["Deep Dive", "Cram Mode"],
-            label_visibility="collapsed",
-        )
-
-        # ── Settings (shown when Settings nav is toggled) ──────────────────
-        if st.session_state.get("_nav_settings_open"):
-            st.markdown(
-                "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
-                "letter-spacing:1.5px;text-transform:uppercase;"
-                "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
-                "Settings</div>",
-                unsafe_allow_html=True,
+        # Inline rename UI
+        if st.session_state.get("_rename_ws_open"):
+            new_name = st.text_input(
+                "Rename", value=active, key="_rename_ws_val",
+                label_visibility="collapsed",
             )
+            c_save, c_cancel = st.columns(2)
+            with c_save:
+                if st.button("Save", key="_rename_save", use_container_width=True, type="primary"):
+                    new_name = new_name.strip()
+                    if new_name and new_name != active:
+                        ws_data = st.session_state["workspaces"].pop(active)
+                        st.session_state["workspaces"][new_name] = ws_data
+                        st.session_state["active_workspace"] = new_name
+                        selected = new_name
+                    st.session_state["_rename_ws_open"] = False
+                    st.rerun()
+            with c_cancel:
+                if st.button("Cancel", key="_rename_cancel", use_container_width=True):
+                    st.session_state["_rename_ws_open"] = False
+                    st.rerun()
+
+        # Add / Rename / Delete row
+        c_add, c_ren, c_del = st.columns([4, 1, 1])
+        with c_add:
+            if st.button("＋ Add Workspace", key="_add_ws_toggle", use_container_width=True):
+                st.session_state["_add_ws_open"] = (
+                    not st.session_state.get("_add_ws_open", False)
+                )
+                st.rerun()
+        with c_ren:
+            if st.button("✎", key="_ren_ws_btn", help="Rename active workspace"):
+                st.session_state["_rename_ws_open"] = (
+                    not st.session_state.get("_rename_ws_open", False)
+                )
+                st.rerun()
+        with c_del:
+            if st.button("🗑", key="_del_ws_btn", help="Delete active workspace"):
+                st.session_state["_confirm_del_ws"] = True
+                st.rerun()
+
+        if st.session_state.get("_add_ws_open"):
+            new_subject = st.text_input(
+                "", placeholder="e.g. CSE 240, Physics…",
+                key="_new_ws_name", label_visibility="collapsed",
+            )
+            if st.button("Create", key="_create_ws", type="primary", use_container_width=True):
+                s = new_subject.strip()
+                if s:
+                    st.session_state["workspaces"].setdefault(s, blank_workspace())
+                    st.session_state["active_workspace"] = s
+                    selected = s
+                    save_active_workspace_to_db(
+                        username, s, st.session_state["workspaces"][s]
+                    )
+                    st.session_state["_add_ws_open"] = False
+                    st.rerun()
+
+        if st.session_state.get("_confirm_del_ws"):
+            if len(subjects) == 1:
+                st.warning("Create another workspace first.")
+                st.session_state["_confirm_del_ws"] = False
+            else:
+                st.warning(f"Delete **{active}**? This cannot be undone.")
+                cy, cn = st.columns(2)
+                with cy:
+                    if st.button("Yes", key="_del_ws_yes", type="primary", use_container_width=True):
+                        ws_id = st.session_state["workspaces"][active].get("id")
+                        if ws_id:
+                            delete_workspace_from_db(ws_id, owner_username=username)
+                        del st.session_state["workspaces"][active]
+                        st.session_state["active_workspace"] = next(
+                            iter(st.session_state["workspaces"])
+                        )
+                        st.session_state["_confirm_del_ws"] = False
+                        st.rerun()
+                with cn:
+                    if st.button("Cancel", key="_del_ws_no", use_container_width=True):
+                        st.session_state["_confirm_del_ws"] = False
+                        st.rerun()
+
+        # ── Study Modes (two pill buttons, not a radio) ────────────────────
+        _sb_section("Study Modes")
+        study_mode = st.session_state.get("_study_mode", "Deep Dive")
+        c_deep, c_cram = st.columns(2)
+        with c_deep:
+            deep_t = "primary" if study_mode == "Deep Dive" else "secondary"
+            if st.button("Deep Mode", key="_mode_deep", use_container_width=True, type=deep_t):
+                st.session_state["_study_mode"] = "Deep Dive"
+                st.rerun()
+        with c_cram:
+            cram_t = "primary" if study_mode == "Cram Mode" else "secondary"
+            if st.button("Cram Mode", key="_mode_cram", use_container_width=True, type=cram_t):
+                st.session_state["_study_mode"] = "Cram Mode"
+                st.rerun()
+
+        # ── Settings panel (API key) ───────────────────────────────────────
+        if st.session_state.get("_nav_settings_open"):
+            _sb_section("Settings")
             from utils.gemini import GEMINI_MODEL
             st.caption(f"Model: `{GEMINI_MODEL}`")
         api_key = st.text_input(
@@ -709,47 +835,24 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             value="",
             type="password",
             placeholder="Paste your Gemini API key here…",
-            label_visibility="visible" if st.session_state.get("_nav_settings_open") else "collapsed",
+            label_visibility=(
+                "visible" if st.session_state.get("_nav_settings_open") else "collapsed"
+            ),
             key="_api_key_input",
         )
 
-        # ── Saved Guides ──────────────────────────────────────────────────
-        saved = st.session_state.get("saved_guides", [])
-        if saved:
-            st.markdown(
-                "<div style='font-size:0.7rem;font-weight:700;color:#5C6A48;"
-                "letter-spacing:1.5px;text-transform:uppercase;"
-                "font-family:\"Truculenta\",sans-serif;margin:0.8rem 0 0.4rem;'>"
-                "Saved Guides</div>",
-                unsafe_allow_html=True,
-            )
-            for guide in saved:
-                guide_id = guide["id"]
-                col_btn, col_del = st.columns([5, 1])
-                with col_btn:
-                    btn_label = f"{guide['title']}  •  {guide['saved_at']}"
-                    if st.button(btn_label, key=f"open_guide_{guide_id}", use_container_width=True):
-                        st.session_state["viewing_guide"] = guide_id
-                        st.rerun()
-                with col_del:
-                    if st.button("✕", key=f"del_guide_{guide_id}", help="Remove"):
-                        if st.session_state.get("viewing_guide") == guide_id:
-                            st.session_state["viewing_guide"] = None
-                        st.session_state["saved_guides"] = [
-                            g for g in st.session_state["saved_guides"] if g["id"] != guide_id
-                        ]
-                        st.rerun()
-
+        # ── Profile / Logout ───────────────────────────────────────────────
         st.divider()
-        col_profile, col_logout = st.columns(2)
-        with col_profile:
+        c_prof, c_out = st.columns(2)
+        with c_prof:
             if st.button("👤 Profile", use_container_width=True):
                 st.session_state["viewing_profile"] = True
                 st.rerun()
-        with col_logout:
-            if st.button("Log Out 🚪", use_container_width=True):
+        with c_out:
+            if st.button("Log Out", use_container_width=True):
                 logout_user()
 
+    st.session_state["active_workspace"] = selected
     return selected, api_key, study_mode
 
 
@@ -944,6 +1047,43 @@ def render_admin_dashboard(current_user: str) -> None:
 # Main Execution Entrypoint
 # ---------------------------------------------------------------------------
 
+def render_saved_guides_page() -> None:
+    st.markdown(
+        "<h1 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
+        "color:#242B18;margin-bottom:0.25rem;'>AI Study Buddy</h1>"
+        "<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:800;"
+        "color:#242B18;margin-bottom:1rem;'>🔖 Saved Guides</h2>",
+        unsafe_allow_html=True,
+    )
+    saved = st.session_state.get("saved_guides", [])
+    if not saved:
+        st.markdown(
+            "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;border-radius:18px;"
+            "padding:2rem;text-align:center;margin-top:1rem;'>"
+            "<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;font-size:1rem;'>"
+            "No guides saved yet — generate a study guide to see it here.</p></div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    for guide in saved:
+        guide_id = guide["id"]
+        col_pill, col_del = st.columns([9, 1])
+        with col_pill:
+            label = f"📄  {guide['title']}  ·  {guide['saved_at']}"
+            if st.button(label, key=f"sg_open_{guide_id}", use_container_width=True, type="primary"):
+                st.session_state["viewing_guide"] = guide_id
+                st.rerun()
+        with col_del:
+            if st.button("✕", key=f"sg_del_{guide_id}", help="Remove guide"):
+                if st.session_state.get("viewing_guide") == guide_id:
+                    st.session_state["viewing_guide"] = None
+                st.session_state["saved_guides"] = [
+                    g for g in saved if g["id"] != guide_id
+                ]
+                st.rerun()
+
+
 def main() -> None:
     st.set_page_config(
         page_title=APP_TITLE,
@@ -1007,32 +1147,36 @@ def main() -> None:
     from tabs.quiz import render_quiz_tab
     #from tabs.saved_guides_view import render_saved_guides_tab  # Optional fallback view file if desired
 
-    page_meta = {
-        "Dashboard":   ("🏠 Dashboard",   subject),
-        "Study guide": ("📖 Study Guide",  subject),
-        "Quiz":        ("✏️ Interactive Quiz", subject),
-        "Saved Guides":("📚 Saved Guides Catalog", subject)
-    }
-    title, caption = page_meta.get(current_page, ("🏠 Dashboard", subject))
-    st.markdown(
-        f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:800;"
-        f"color:#242B18;margin-bottom:0.1rem;'>{title}</h2>"
-        f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
-        f"font-size:0.95rem;margin-top:0;'>{caption}</p>",
-        unsafe_allow_html=True,
-    )
-    st.divider()
-
-    # Absolute Separate Page Canvas Logic routing instead of shared multi-tabs
-    if current_page == "Dashboard":
+    if current_page == "Saved Guides":
+        render_saved_guides_page()
+    elif current_page == "Dashboard":
+        st.markdown(
+            "<h1 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
+            "color:#242B18;margin-bottom:0.1rem;'>AI Study Buddy</h1>"
+            f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
+            f"font-size:0.95rem;margin-top:0;'>{subject}</p>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
         render_ingest_tab(subject, workspace, api_key)
-    elif current_page == "Study guide":
-        render_study_tab(api_key, subject, workspace, study_mode)
-    elif current_page == "Quiz":
-        render_quiz_tab(api_key, subject, workspace)
-    elif current_page == "Saved Guides":
-        # Render inline overview if clicked via menu link
-        st.info("Select a guide from the left sidebar section 'Saved Guides' to view its detailed layout content canvas.")
+    else:
+        page_meta = {
+            "Study guide": ("📄 Study Guide",       subject),
+            "Quiz":        ("❓ Interactive Quiz",  subject),
+        }
+        title, caption = page_meta.get(current_page, ("🏠 Dashboard", subject))
+        st.markdown(
+            f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:800;"
+            f"color:#242B18;margin-bottom:0.1rem;'>{title}</h2>"
+            f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
+            f"font-size:0.95rem;margin-top:0;'>{caption}</p>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
+        if current_page == "Study guide":
+            render_study_tab(api_key, subject, workspace, study_mode)
+        elif current_page == "Quiz":
+            render_quiz_tab(api_key, subject, workspace)
 
     if st.session_state["is_dirty"]:
         save_active_workspace_to_db(current_user, subject, workspace)
