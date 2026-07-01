@@ -311,29 +311,26 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        /* Browse / Upload button inside file uploader — green fill, white text */
+        /* Browse / Upload button inside file uploader — yellow fill, dark text */
         [data-testid="stFileUploaderDropzone"] button,
         [data-testid="stFileUploaderDropzoneButton"],
         [data-testid="stFileUploader"] [data-testid="baseButton-secondary"],
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
         [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
-            background: var(--green) !important;
-            border: none !important;
-            border-radius: 10px !important;
-            color: #FFFFFF !important;
-            font-weight: 600 !important;
-            font-family: 'Truculenta', sans-serif !important;
+            background:    var(--yellow) !important;
+            border:        none !important;
+            border-radius: 999px !important;
+            color:         var(--ink) !important;
+            font-weight:   600 !important;
+            font-family:   'Truculenta', sans-serif !important;
+            padding:       6px 20px !important;
         }
         [data-testid="stFileUploaderDropzone"] button span,
         [data-testid="stFileUploaderDropzone"] button p,
         [data-testid="stFileUploaderDropzoneButton"] span,
         [data-testid="stFileUploaderDropzoneButton"] p,
-        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] span,
-        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] p,
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] span,
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p { color: #FFFFFF !important; }
-        [data-testid="stFileUploaderDropzone"] button svg,
-        [data-testid="stFileUploaderDropzoneButton"] svg { fill: #FFFFFF !important; }
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p { color: var(--ink) !important; }
 
         /* ── Input fields — green focus ring ── */
         div[data-baseweb="input"] input,
@@ -581,12 +578,6 @@ def apply_theme() -> None:
 
         section[data-testid="stSidebar"] {
             min-width: 0 !important;
-        }
-
-        /* ── uploadUpload double-text fix ── */
-        [data-testid="stFileUploaderDropzone"] button span:first-child,
-        [data-testid="stFileUploader"] button span:first-child {
-            display: none !important;
         }
 
         /* ── Study guide expanders ── */
