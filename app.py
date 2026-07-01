@@ -702,9 +702,31 @@ def apply_theme() -> None:
                 });
             }
 
-            var _mo = new MutationObserver(initSidebar);
+            // Fix file-uploader button: Streamlit injects a hidden "upload" span
+            // before the visible <p>Upload</p>. Our global span colour rule makes
+            // it visible, producing "uploadUpload". Collapse any leaf span whose
+            // text is exactly "upload" so only the <p> label remains.
+            function fixFileUploaderBtn() {
+                document.querySelectorAll(
+                    '[data-testid="stFileUploaderDropzone"] button'
+                ).forEach(function(btn) {
+                    btn.querySelectorAll('span').forEach(function(s) {
+                        if (s.children.length === 0 &&
+                            s.textContent.trim().toLowerCase() === 'upload') {
+                            s.style.setProperty('font-size',  '0',            'important');
+                            s.style.setProperty('width',      '0',            'important');
+                            s.style.setProperty('height',     '0',            'important');
+                            s.style.setProperty('overflow',   'hidden',       'important');
+                            s.style.setProperty('display',    'inline-block', 'important');
+                        }
+                    });
+                });
+            }
+
+            function _runAll() { initSidebar(); fixFileUploaderBtn(); }
+            var _mo = new MutationObserver(_runAll);
             _mo.observe(document.body, {childList: true, subtree: true});
-            initSidebar();
+            _runAll();
 
             // Auto-restore API key from localStorage
             var _restored = false;
