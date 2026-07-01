@@ -19,6 +19,18 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 IMAGE_ANALYSIS_PROMPT = "This is a computer science slide. Transcribe the code and explain any diagrams."
 GEMINI_MODEL = "gemini-2.5-flash"
 
+# Strict extension whitelist — nothing outside this set is processed
+_ALLOWED_EXTENSIONS: frozenset[str] = frozenset({"pdf", "pptx", "jpg", "jpeg", "png", "txt"})
+
+# Any extension matching these patterns is always rejected regardless of MIME
+_BLOCKED_EXTENSIONS: frozenset[str] = frozenset({
+    "db", "sqlite", "sqlite3", "sql",          # database files
+    "py", "pyc", "pyw",                         # Python scripts
+    "sh", "bash", "zsh", "bat", "cmd", "ps1",  # shell scripts
+    "exe", "dll", "so", "dylib",               # executables / libraries
+    "js", "ts", "php", "rb", "pl",             # other code
+})
+
 
 # ---------------------------------------------------------------------------
 # Text helpers
@@ -156,8 +168,40 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict | None, int, 
     from utils.metrics import report_parse_metrics
     parse_start = time.perf_counter()
     file_bytes = uploaded_file.getvalue()
-    file_name = uploaded_file.name
+
+    # ── Filename sanitisation — strip path traversal and non-safe chars ──────
+    raw_name = uploaded_file.name or "upload"
+    # Keep only the basename, drop any directory component
+    safe_name = re.sub(r"[^\w.\- ]", "_", raw_name.split("/")[-1].split("\\")[-1])
+    safe_name = safe_name.strip(". ") or "upload"
+    file_name = safe_name
+
     file_size_bytes = len(file_bytes)
+
+    # ── Extension guard ──────────────────────────────────────────────────────
+    # Extract the extension after the last dot; reject double-extension tricks
+    # like "report.pdf.py" by checking the true final extension.
+    parts = file_name.rsplit(".", 1)
+    file_ext = parts[-1].lower() if len(parts) == 2 else ""
+
+    if file_ext in _BLOCKED_EXTENSIONS:
+        logger.warning(
+            "Blocked upload with dangerous extension '.%s' (original name: '%s')",
+            file_ext, raw_name,
+        )
+        return None, 0, [
+            f"'{raw_name}' was rejected: files with the .{file_ext} extension are not allowed."
+        ]
+
+    if file_ext not in _ALLOWED_EXTENSIONS:
+        logger.warning(
+            "Blocked upload with unknown extension '.%s' (original name: '%s')",
+            file_ext, raw_name,
+        )
+        return None, 0, [
+            f"'{raw_name}' is not a supported file type. "
+            f"Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}."
+        ]
 
     # ── Size guard ──────────────────────────────────────────────────────────
     if file_size_bytes > MAX_UPLOAD_BYTES:
@@ -167,7 +211,7 @@ def parse_uploaded_file(uploaded_file, api_key: str) -> tuple[dict | None, int, 
             "Split the document and re-upload."
         ]
 
-    file_type = file_name.rsplit(".", 1)[-1].lower()
+    file_type = file_ext  # already extracted and validated above
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     warnings, images = [], []
     indexed_units = 1

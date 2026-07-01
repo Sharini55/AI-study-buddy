@@ -532,48 +532,84 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar collapse button (inside sidebar) → show « glyph ── */
+        /* ── Sidebar collapse button (inside sidebar) ────────────────────────
+           Fixed 42×42 box prevents micro-bar collapse.
+           All native inner content (SVG, icon span, p) is made transparent
+           so nothing bleeds through. The glyph is injected via ::after
+           as an absolutely centred overlay — no relative-position text hack.
+        ── */
         [data-testid="stSidebarCollapseButton"] button {
+            position:      relative !important;
+            width:         42px !important;
+            height:        42px !important;
+            min-width:     42px !important;
+            min-height:    42px !important;
+            line-height:   42px !important;
+            padding:       0 !important;
             background:    transparent !important;
             border:        none !important;
             cursor:        pointer !important;
-            padding:       4px 6px !important;
+            overflow:      hidden !important;
         }
-        /* Hide the Material icon that renders as literal text */
+        /* Make all native child content invisible without removing its layout */
         [data-testid="stSidebarCollapseButton"] button svg,
-        [data-testid="stSidebarCollapseButton"] button span[data-testid="stIconMaterial"],
-        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {
-            display: none !important;
+        [data-testid="stSidebarCollapseButton"] button span,
+        [data-testid="stSidebarCollapseButton"] button p,
+        [data-testid="stSidebarCollapseButton"] button div {
+            color:      transparent !important;
+            fill:       transparent !important;
+            opacity:    0 !important;
+            user-select: none !important;
         }
+        /* Centred « glyph overlay */
         [data-testid="stSidebarCollapseButton"] button::after {
-            content:     "«";
-            font-size:   1.35rem;
-            font-weight: 700;
-            color:       var(--ink);
-            line-height: 1;
-            display:     block;
+            content:    "«";
+            position:   absolute !important;
+            inset:      0 !important;
+            display:    flex !important;
+            align-items:     center !important;
+            justify-content: center !important;
+            font-size:  1.35rem !important;
+            font-weight: 700 !important;
+            color:      var(--ink) !important;
+            pointer-events: none !important;
         }
 
-        /* ── Sidebar expand button (in toolbar, sidebar collapsed) → show » glyph ── */
+        /* ── Sidebar expand button (toolbar, sidebar collapsed) ───────────── */
         [data-testid="stExpandSidebarButton"] button {
+            position:      relative !important;
+            width:         42px !important;
+            height:        42px !important;
+            min-width:     42px !important;
+            min-height:    42px !important;
+            line-height:   42px !important;
+            padding:       0 !important;
             background:    var(--yellow) !important;
             border:        none !important;
             border-radius: 0 10px 10px 0 !important;
-            padding:       8px 11px !important;
             cursor:        pointer !important;
+            overflow:      hidden !important;
         }
         [data-testid="stExpandSidebarButton"] button svg,
-        [data-testid="stExpandSidebarButton"] button span[data-testid="stIconMaterial"],
-        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
-            display: none !important;
+        [data-testid="stExpandSidebarButton"] button span,
+        [data-testid="stExpandSidebarButton"] button p,
+        [data-testid="stExpandSidebarButton"] button div {
+            color:      transparent !important;
+            fill:       transparent !important;
+            opacity:    0 !important;
+            user-select: none !important;
         }
         [data-testid="stExpandSidebarButton"] button::after {
-            content:     "»";
-            font-size:   1.35rem;
-            font-weight: 700;
-            color:       var(--ink);
-            line-height: 1;
-            display:     block;
+            content:    "»";
+            position:   absolute !important;
+            inset:      0 !important;
+            display:    flex !important;
+            align-items:     center !important;
+            justify-content: center !important;
+            font-size:  1.35rem !important;
+            font-weight: 700 !important;
+            color:      var(--ink) !important;
+            pointer-events: none !important;
         }
 
         section[data-testid="stSidebar"] {
@@ -1219,6 +1255,26 @@ def render_admin_dashboard(current_user: str) -> None:
     from tabs.db_inspector import render_db_inspector_tab
     from utils.metrics import _report_path, _METRICS_DIR
     import pandas as pd
+
+    # ── Server-side admin verification ────────────────────────────────────────
+    # Session state flags can be spoofed; re-query the DB every time this
+    # page renders to confirm the account truly has is_admin=True.
+    _db_check = SessionLocal()
+    try:
+        _user_row = _db_check.query(User).filter(User.username == current_user).first()
+        _confirmed_admin = bool(_user_row and _user_row.is_admin)
+    except Exception:
+        logger.error("Admin gate DB check failed for '%s'", current_user, exc_info=True)
+        _confirmed_admin = False
+    finally:
+        _db_check.close()
+
+    if not _confirmed_admin:
+        st.error("Access denied.")
+        logger.warning(
+            "Admin dashboard access attempt by non-admin user '%s'", current_user
+        )
+        return
 
     st.title("🛠 Admin Dashboard")
     st.caption(f"Logged in as **{current_user}**")
