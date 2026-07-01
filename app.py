@@ -311,26 +311,44 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        /* Browse / Upload button inside file uploader — yellow fill, dark text */
-        [data-testid="stFileUploaderDropzone"] button,
-        [data-testid="stFileUploaderDropzoneButton"],
-        [data-testid="stFileUploader"] [data-testid="baseButton-secondary"],
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
-        [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
+        /* Browse / Upload button — yellow pill, "Upload" injected via ::after.
+           All native child content (span, p, div) is zeroed out so Streamlit's
+           internal hidden "upload" span cannot double-render alongside the label. */
+        [data-testid="stFileUploaderDropzone"] button {
+            position:      relative !important;
             background:    var(--yellow) !important;
             border:        none !important;
             border-radius: 999px !important;
-            color:         var(--ink) !important;
-            font-weight:   600 !important;
-            font-family:   'Truculenta', sans-serif !important;
-            padding:       6px 20px !important;
+            padding:       6px 28px !important;
+            min-width:     90px !important;
+            min-height:    36px !important;
+            cursor:        pointer !important;
         }
         [data-testid="stFileUploaderDropzone"] button span,
         [data-testid="stFileUploaderDropzone"] button p,
-        [data-testid="stFileUploaderDropzoneButton"] span,
-        [data-testid="stFileUploaderDropzoneButton"] p,
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] span,
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] p { color: var(--ink) !important; }
+        [data-testid="stFileUploaderDropzone"] button div,
+        [data-testid="stFileUploaderDropzone"] button svg {
+            font-size: 0 !important;
+            color:     transparent !important;
+            fill:      transparent !important;
+            width:     0 !important;
+            height:    0 !important;
+            overflow:  hidden !important;
+            display:   inline-block !important;
+        }
+        [data-testid="stFileUploaderDropzone"] button::after {
+            content:      "Upload" !important;
+            position:     absolute !important;
+            inset:        0 !important;
+            display:      flex !important;
+            align-items:  center !important;
+            justify-content: center !important;
+            font-size:    1rem !important;
+            font-weight:  600 !important;
+            font-family:  'Truculenta', sans-serif !important;
+            color:        var(--ink) !important;
+            pointer-events: none !important;
+        }
 
         /* ── Input fields — green focus ring ── */
         div[data-baseweb="input"] input,
