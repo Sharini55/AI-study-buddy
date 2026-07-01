@@ -582,6 +582,63 @@ def apply_theme() -> None:
         section[data-testid="stSidebar"] {
             min-width: 0 !important;
         }
+
+        /* ── uploadUpload double-text fix ── */
+        [data-testid="stFileUploaderDropzone"] button span:first-child,
+        [data-testid="stFileUploader"] button span:first-child {
+            display: none !important;
+        }
+
+        /* ── Study guide expanders ── */
+        /* Remove browser native disclosure marker */
+        details > summary { list-style: none !important; }
+        details > summary::-webkit-details-marker { display: none !important; }
+
+        /* Expander container: white bg, green left accent */
+        div[data-testid="stExpander"] {
+            background:    var(--panel) !important;
+            border:        1.5px solid var(--line) !important;
+            border-radius: 14px !important;
+            border-left:   4px solid var(--green) !important;
+            margin-bottom: 0.5rem !important;
+        }
+
+        /* Expander summary row: clean light bg, no orange */
+        div[data-testid="stExpander"] details summary {
+            background:    var(--sidebar) !important;
+            border-radius: 10px !important;
+            padding:       0.6rem 1rem !important;
+            cursor:        pointer !important;
+        }
+        div[data-testid="stExpander"] details[open] > summary {
+            border-radius:  10px 10px 0 0 !important;
+            border-bottom:  1px solid var(--line) !important;
+        }
+
+        /* Hide Streamlit's Material icon text; replace with CSS chevron */
+        div[data-testid="stExpander"] details summary [data-testid="stIconMaterial"],
+        div[data-testid="stExpander"] details summary svg { display: none !important; }
+
+        div[data-testid="stExpander"] details summary::before {
+            content:        "›";
+            font-size:      1.3rem;
+            font-weight:    700;
+            color:          var(--green);
+            margin-right:   8px;
+            display:        inline-block;
+            transition:     transform 0.15s;
+            vertical-align: middle;
+            line-height:    1;
+        }
+        div[data-testid="stExpander"] details[open] > summary::before {
+            transform: rotate(90deg);
+        }
+
+        /* Expander body padding */
+        div[data-testid="stExpander"] details > div {
+            padding: 0.75rem 1rem !important;
+        }
+
         </style>
         <script>
         (function() {

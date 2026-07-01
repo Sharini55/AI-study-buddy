@@ -300,7 +300,7 @@ def render_guide(markdown: str) -> None:
         st.markdown(markdown)
         return
     for topic in topics:
-        with st.expander(f"📖 {topic['title']}", expanded=False):
+        with st.expander(topic["title"], expanded=False):
             st.markdown(topic["body"])
             st.divider()
             st.markdown("**✅ Answer**")
