@@ -336,11 +336,53 @@ def add_textbook_content(workspace: dict, text: str, subject: str) -> bool:
     return True
 
 
+def _persist_chunks(file_item: dict, workspace_id: str) -> None:
+    """Chunk one file item and write rows to material_chunks.
+
+    Only called for files that are genuinely new (not already in known_ids),
+    so we never produce duplicate chunk rows for the same source file.
+    Errors are logged and swallowed — a chunking failure must never block
+    the main upload flow.
+    """
+    try:
+        from utils.chunking import chunk_document
+        from utils.persistence import SessionLocal, MaterialChunk
+
+        chunks = chunk_document(
+            content_text=file_item.get("content", ""),
+            source_file_id=file_item["id"],
+            workspace_id=workspace_id,
+            source_name=file_item["name"],
+        )
+        if not chunks:
+            return
+
+        db = SessionLocal()
+        try:
+            for c in chunks:
+                db.add(MaterialChunk(**c))
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.error(
+                "Failed to persist chunks for '%s'", file_item["name"], exc_info=True
+            )
+        finally:
+            db.close()
+    except Exception:
+        logger.error(
+            "_persist_chunks crashed for '%s'", file_item.get("name"), exc_info=True
+        )
+
+
 def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: str, api_key: str) -> None:
     from utils.metrics import log_metric
     any_new = False
     warnings = []
     known_ids = {f["id"] for f in workspace["files"]}
+
+    # workspace_id is needed for chunk foreign keys; fall back gracefully if absent.
+    workspace_id: str = workspace.get("id", "")
 
     image_uploads = [
         item for item in uploaded_files or []
@@ -360,6 +402,8 @@ def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: 
             workspace["files"].append(file_item)
             known_ids.add(file_item["id"])
             any_new = True
+            if workspace_id:
+                _persist_chunks(file_item, workspace_id)
 
     if add_textbook_content(workspace, pasted_text, subject):
         any_new = True

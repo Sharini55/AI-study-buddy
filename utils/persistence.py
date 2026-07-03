@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
+from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text, Index
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 DB_FILE    = "sundevil_ai.db"
@@ -75,6 +75,7 @@ class SourceFile(Base):
     
     workspace = relationship("Workspace", back_populates="files")
     images = relationship("SourceImage", back_populates="source_file", cascade="all, delete-orphan")
+    chunks = relationship("MaterialChunk", back_populates="source_file", cascade="all, delete-orphan")
 
 
 class SourceImage(Base):
@@ -88,6 +89,39 @@ class SourceImage(Base):
     mime_type = Column(String, nullable=False)
     
     source_file = relationship("SourceFile", back_populates="images")
+
+
+class MaterialChunk(Base):
+    """One semantically coherent slice of a SourceFile's extracted text.
+
+    Chunks are created at index time by ``utils.chunking.chunk_document`` and
+    stored here so the quiz-feedback loop can retrieve only the passages that
+    are relevant to the topics a student answered incorrectly — without
+    scanning the entire document.
+
+    topic_tags  – JSON-encoded list[str] of heading-derived labels, e.g.
+                  '["Binary Search Trees", "AVL Rotations"]'.
+                  Queried with LIKE '%"<tag>"%' until a vector index is added.
+    char_start  – byte offset of this chunk inside the original content_text,
+                  useful for debugging and future highlight-in-source features.
+    """
+    __tablename__ = "material_chunks"
+
+    id             = Column(String,  primary_key=True, default=lambda: uuid.uuid4().hex)
+    source_file_id = Column(String,  ForeignKey("source_files.id"), nullable=False)
+    workspace_id   = Column(String,  ForeignKey("workspaces.id"),   nullable=False)
+    chunk_index    = Column(Integer, nullable=False)
+    chunk_text     = Column(Text,    nullable=False)
+    topic_tags     = Column(Text,    nullable=True)   # JSON list of strings
+    char_start     = Column(Integer, nullable=True)   # byte offset in source
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+    source_file = relationship("SourceFile", back_populates="chunks")
+
+    # Composite index: workspace_id first so per-workspace tag scans are fast.
+    __table_args__ = (
+        Index("ix_material_chunks_ws_tags", "workspace_id", "topic_tags"),
+    )
 
 
 class StudyGuide(Base):
@@ -163,6 +197,34 @@ def _migrate_study_guide_hash() -> None:
 
 
 _migrate_study_guide_hash()
+
+
+def _migrate_material_chunks() -> None:
+    """Create the material_chunks table on databases that predate this column."""
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS material_chunks (
+                    id             VARCHAR PRIMARY KEY,
+                    source_file_id VARCHAR NOT NULL REFERENCES source_files(id),
+                    workspace_id   VARCHAR NOT NULL REFERENCES workspaces(id),
+                    chunk_index    INTEGER NOT NULL,
+                    chunk_text     TEXT    NOT NULL,
+                    topic_tags     TEXT,
+                    char_start     INTEGER,
+                    created_at     DATETIME
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_material_chunks_ws_tags "
+                "ON material_chunks (workspace_id, topic_tags)"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Table already exists — nothing to do.
+
+
+_migrate_material_chunks()
 
 # ---------------------------------------------------------------------------
 # Salted Password Security (Security Hardening)
