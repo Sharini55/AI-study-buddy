@@ -1358,7 +1358,6 @@ def render_admin_dashboard(current_user: str) -> None:
             st.info("No metrics directory found.")
 
     with users_tab:
-        from utils.persistence import SessionLocal, User
         db = SessionLocal()
         try:
             users = db.query(User).all()
