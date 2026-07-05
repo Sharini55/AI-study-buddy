@@ -1,4 +1,5 @@
 import hmac
+import json
 import logging
 import os
 import hashlib
@@ -8,9 +9,16 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text, Index
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.types import TypeDecorator
 
 DB_FILE    = "sundevil_ai.db"
 STORAGE_DIR = "./.storage/images"
+
+# Width of the embedding vectors stored per chunk. gemini-embedding-001 defaults
+# to 3072 dims but supports Matryoshka truncation via output_dimensionality —
+# 768 keeps pgvector index size reasonable while staying well within the
+# accuracy Google recommends for the truncated tiers (3072 / 1536 / 768).
+EMBEDDING_DIM = 768
 
 # OWASP recommended minimum for PBKDF2-SHA256 (2024).  Stored in every new hash
 # so verify_password can handle hashes created with different iteration counts.
@@ -28,6 +36,62 @@ else:
     engine = create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def _ensure_pgvector_extension() -> None:
+    """Enable pgvector so the ``vector`` column type exists before table creation.
+
+    No-op on SQLite (local dev fallback). Must run before Base.metadata.create_all().
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            logger.warning(
+                "Could not enable the pgvector extension. On Azure Database for "
+                "PostgreSQL Flexible Server, allow-list 'VECTOR' under the server's "
+                "azure.extensions parameter before this will succeed.",
+                exc_info=True,
+            )
+
+
+_ensure_pgvector_extension()
+
+
+class EmbeddingType(TypeDecorator):
+    """Cross-dialect vector column.
+
+    Uses pgvector's native ``vector`` type on PostgreSQL so similarity search
+    can use an ANN index. Falls back to a JSON-encoded float list on SQLite,
+    which has no vector type but is only used for local dev.
+    """
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from pgvector.sqlalchemy import Vector
+            return dialect.type_descriptor(Vector(EMBEDDING_DIM))
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            return value
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            return list(value)
+        return json.loads(value)
+
 
 # ---------------------------------------------------------------------------
 # Database Tables (Schemas)
@@ -101,9 +165,12 @@ class MaterialChunk(Base):
 
     topic_tags  – JSON-encoded list[str] of heading-derived labels, e.g.
                   '["Binary Search Trees", "AVL Rotations"]'.
-                  Queried with LIKE '%"<tag>"%' until a vector index is added.
+                  Queried with LIKE '%"<tag>"%' as a coarse pre-filter.
     char_start  – byte offset of this chunk inside the original content_text,
                   useful for debugging and future highlight-in-source features.
+    embedding   – EMBEDDING_DIM-length vector from utils.embeddings, generated
+                  at ingest time. NULL if embedding generation failed or was
+                  skipped (e.g. no API key configured yet).
     """
     __tablename__ = "material_chunks"
 
@@ -114,6 +181,7 @@ class MaterialChunk(Base):
     chunk_text     = Column(Text,    nullable=False)
     topic_tags     = Column(Text,    nullable=True)   # JSON list of strings
     char_start     = Column(Integer, nullable=True)   # byte offset in source
+    embedding      = Column(EmbeddingType, nullable=True)
     created_at     = Column(DateTime, default=datetime.utcnow)
 
     source_file = relationship("SourceFile", back_populates="chunks")
@@ -153,7 +221,17 @@ class QuizAttempt(Base):
 
 
 # Build all local SQL tables on script initialization
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception:
+    logger.error(
+        "Database schema creation failed. If the error mentions the 'vector' "
+        "type, the pgvector extension isn't enabled — run CREATE EXTENSION "
+        "vector; on the database (Azure Flexible Server also requires "
+        "allow-listing 'VECTOR' under azure.extensions first).",
+        exc_info=True,
+    )
+    raise
 
 
 def _migrate_and_seed_admin() -> None:
@@ -225,6 +303,36 @@ def _migrate_material_chunks() -> None:
 
 
 _migrate_material_chunks()
+
+
+def _migrate_material_chunks_embedding() -> None:
+    """Add the embedding column (and its ANN index) to DBs that predate vector storage."""
+    with engine.connect() as conn:
+        if engine.dialect.name == "postgresql":
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE material_chunks ADD COLUMN embedding vector({EMBEDDING_DIM})"
+                ))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Column already exists, or extension unavailable.
+            try:
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_material_chunks_embedding_cosine "
+                    "ON material_chunks USING hnsw (embedding vector_cosine_ops)"
+                ))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # pgvector too old for HNSW, or column missing.
+        else:
+            try:
+                conn.execute(text("ALTER TABLE material_chunks ADD COLUMN embedding TEXT"))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Column already exists — nothing to do.
+
+
+_migrate_material_chunks_embedding()
 
 # ---------------------------------------------------------------------------
 # Salted Password Security (Security Hardening)
