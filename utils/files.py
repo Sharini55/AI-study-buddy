@@ -336,13 +336,14 @@ def add_textbook_content(workspace: dict, text: str, subject: str) -> bool:
     return True
 
 
-def _persist_chunks(file_item: dict, workspace_id: str) -> None:
-    """Chunk one file item and write rows to material_chunks.
+def _persist_chunks(file_item: dict, workspace_id: str, api_key: str) -> None:
+    """Chunk one file item, embed each chunk, and write rows to material_chunks.
 
     Only called for files that are genuinely new (not already in known_ids),
     so we never produce duplicate chunk rows for the same source file.
-    Errors are logged and swallowed — a chunking failure must never block
-    the main upload flow.
+    Errors are logged and swallowed — a chunking or embedding failure must
+    never block the main upload flow; chunks simply persist with a NULL
+    embedding when generation fails (e.g. no API key configured yet).
     """
     try:
         from utils.chunking import chunk_document
@@ -356,6 +357,22 @@ def _persist_chunks(file_item: dict, workspace_id: str) -> None:
         )
         if not chunks:
             return
+
+        if api_key:
+            from utils.embeddings import embed_chunks
+            try:
+                vectors = embed_chunks(api_key, [c["chunk_text"] for c in chunks])
+            except Exception:
+                logger.error(
+                    "Embedding generation failed for '%s' — chunks will be stored without vectors",
+                    file_item["name"], exc_info=True,
+                )
+                vectors = [None] * len(chunks)
+            for chunk, vector in zip(chunks, vectors):
+                chunk["embedding"] = vector
+        else:
+            for chunk in chunks:
+                chunk["embedding"] = None
 
         db = SessionLocal()
         try:
@@ -403,7 +420,7 @@ def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: 
             known_ids.add(file_item["id"])
             any_new = True
             if workspace_id:
-                _persist_chunks(file_item, workspace_id)
+                _persist_chunks(file_item, workspace_id, api_key)
 
     if add_textbook_content(workspace, pasted_text, subject):
         any_new = True
