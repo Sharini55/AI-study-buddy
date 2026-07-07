@@ -16,10 +16,8 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     left, right = st.columns([1, 1], gap="large")
     with left:
         uploaded_files = st.file_uploader(
-            "Drag & drop files here, or click to browse (PDF, PPTX, JPG, PNG)",
-            type=SUPPORTED_UPLOADS,
-            accept_multiple_files=True,
-            key=f"uploader_{subject}",
+            "Upload source files", type=SUPPORTED_UPLOADS, accept_multiple_files=True,
+            key=f"uploader_{subject}", help="Accepted: PDF, PPTX, JPG, PNG.",
         )
     with right:
         pasted_text = st.text_area(
@@ -31,7 +29,25 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     col_index, col_reset = st.columns([2, 1])
     with col_index:
         if st.button("Index Materials", type="primary", use_container_width=True):
+            from utils.analytics import capture
+            username = st.session_state.get("username", "anonymous")
+            prev_count = len(workspace.get("files", []))
             index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
+            new_files = workspace.get("files", [])[prev_count:]
+            for f in new_files:
+                capture("document_uploaded", username, {
+                    "subject": subject,
+                    "file_type": f.get("type", "unknown"),
+                    "file_name": f.get("name", "unknown"),
+                    "size_bytes": f.get("size", 0),
+                })
+            if pasted_text and pasted_text.strip():
+                capture("document_uploaded", username, {
+                    "subject": subject,
+                    "file_type": "text_paste",
+                    "file_name": "pasted_text",
+                    "size_bytes": len(pasted_text.encode("utf-8")),
+                })
 
     with col_reset:
         if st.button("🗑 Reset Workspace", use_container_width=True):
@@ -47,17 +63,12 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         with yes_col:
             if st.button("Yes, reset everything", type="primary", use_container_width=True,
                          key=f"confirm_yes_{subject}"):
-                from utils.persistence import delete_workspace_storage
                 fresh = blank_workspace()
                 # Preserve the workspace id so DB sync can still find the row
-                workspace_id = workspace.get("id", fresh["id"])
-                fresh["id"] = workspace_id
-                # Remove DB file rows and physical images before clearing memory
-                delete_workspace_storage(workspace_id)
+                fresh["id"] = workspace.get("id", fresh["id"])
                 workspace.clear()
                 workspace.update(fresh)
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
-                st.session_state["is_dirty"] = True
                 st.toast(f"Workspace '{subject}' has been reset.", icon="🗑")
                 st.rerun()
         with no_col:
@@ -66,5 +77,6 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
                 st.rerun()
 
+    workspace_summary(workspace)
     for warning in sorted(set(workspace.get("visual_warnings", []))):
         st.warning(warning)
