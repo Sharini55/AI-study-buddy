@@ -1,17 +1,8 @@
-import logging
-import os
 import re
 import time
 import streamlit as st
 from utils.persistence import SessionLocal, User, hash_password, verify_password
-
-logger = logging.getLogger(__name__)
-
-# Sentinel used when the requested username does not exist.  We always run the
-# full PBKDF2 verification path so response time does not reveal whether a
-# username is registered (timing-based enumeration defence).
-# Format matches the current hash_password output: {iterations}:{salt}:{hash}.
-_TIMING_SENTINEL = f"260000:{'0' * 32}:{'0' * 64}"
+from utils.analytics import capture, identify
 
 
 def init_auth_session_state():
@@ -19,8 +10,6 @@ def init_auth_session_state():
         st.session_state["authenticated"] = False
     if "username" not in st.session_state:
         st.session_state["username"] = None
-    if "is_admin" not in st.session_state:
-        st.session_state["is_admin"] = False
     if "active_workspace" not in st.session_state:
         st.session_state["active_workspace"] = None
 
@@ -53,10 +42,6 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
     if not ok:
         return False, msg
 
-    reserved = os.environ.get("ADMIN_USERNAME", "").strip().lower()
-    if reserved and username == reserved:
-        return False, "Registration rejected: This username is reserved or unavailable."
-
     db = SessionLocal()
     try:
         existing = db.query(User).filter(User.username == username).first()
@@ -65,11 +50,12 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
         new_user = User(username=username, password_hash=hash_password(password))
         db.add(new_user)
         db.commit()
+        capture("user_signed_up", username, {"username": username})
+        identify(username, {"username": username})
         return True, "Account created! You can now log in."
-    except Exception:
+    except Exception as e:
         db.rollback()
-        logger.error("register_user failed for '%s'", username, exc_info=True)
-        return False, "Something went wrong while creating your account. Please try again."
+        return False, f"Database error: {str(e)}"
     finally:
         db.close()
 
@@ -85,56 +71,39 @@ def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
     try:
         user_record = db.query(User).filter(User.username == username).first()
         if not user_record:
-            # Run a full PBKDF2 round against the sentinel so response time is
-            # indistinguishable from a wrong-password attempt on a real account.
-            verify_password(_TIMING_SENTINEL, password)
             return False, "Invalid username or password."
         if verify_password(user_record.password_hash, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
-            st.session_state["is_admin"] = bool(user_record.is_admin)
+            capture("user_logged_in", username, {"username": username})
+            identify(username, {"username": username})
             return True, "Login successful!"
         return False, "Invalid username or password."
-    except Exception:
-        logger.error("login_user failed for '%s'", username, exc_info=True)
-        return False, "Something went wrong while logging in. Please try again."
+    except Exception as e:
+        return False, f"Database connection error: {str(e)}"
     finally:
         db.close()
 
 
 def delete_account(username: str) -> tuple[bool, str]:
-    """Permanently deletes the user, all their DB rows, and their physical image files."""
+    """Permanently deletes the user and all their data."""
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == username).first()
         if not user:
             return False, "User not found."
-        # Collect paths BEFORE cascade-delete removes the SourceImage rows.
-        image_paths = [
-            img.storage_path
-            for ws in user.workspaces
-            for f in ws.files
-            for img in f.images
-        ]
         db.delete(user)
         db.commit()
-    except Exception:
+        return True, "Account deleted."
+    except Exception as e:
         db.rollback()
-        logger.error("delete_account failed for '%s'", username, exc_info=True)
-        return False, "Something went wrong while deleting your account. Please try again."
+        return False, f"Error: {str(e)}"
     finally:
         db.close()
-    # Remove physical files after the DB transaction succeeds.
-    for path in image_paths:
-        try:
-            os.remove(path)
-        except OSError:
-            pass  # Already gone — nothing to clean up.
-    return True, "Account deleted."
 
 
 def logout_user():
-    for key in ["authenticated", "username", "is_admin", "active_workspace", "workspaces",
+    for key in ["authenticated", "username", "active_workspace", "workspaces",
                 "saved_guides", "viewing_guide", "admin_view"]:
         st.session_state.pop(key, None)
     st.rerun()
@@ -146,10 +115,9 @@ def render_login_signup_ui():
     st.markdown(
         """
         <div style="text-align:center; margin-top:2rem; margin-bottom:2rem;">
-            <h1 style="color:#ABC270; font-size:2.8rem; font-weight:800;
-                       font-family:'Truculenta',sans-serif; letter-spacing:-1px;
-                       margin-bottom:0.2rem;">📚 AI Study Buddy</h1>
-            <p style="color:#5C6A48; font-size:1.15rem; font-family:'Truculenta',sans-serif;">
+            <h1 style="color:#8C1D40; font-size:2.8rem; font-weight:800;
+                       letter-spacing:-1px; margin-bottom:0.2rem;">🔱 SunDevil AI</h1>
+            <p style="color:#6F6A60; font-size:1.15rem;">
                 Active-Recall Study Workspaces
             </p>
         </div>
@@ -166,7 +134,7 @@ def render_login_signup_ui():
             with st.form("login_form", clear_on_submit=False):
                 user_login = st.text_input("Username", placeholder="your username")
                 pass_login = st.text_input("Password", type="password", placeholder="••••••••")
-                if st.form_submit_button("Log In", use_container_width=True, type="primary"):
+                if st.form_submit_button("Log In", use_container_width=True):
                     success, msg = login_user(user_login, pass_login)
                     if success:
                         st.toast(msg, icon="🔥")
@@ -187,7 +155,7 @@ def render_login_signup_ui():
                     placeholder="Min 8 chars · 1 number · 1 special character",
                     help="Requirements: 8+ characters, at least one number, at least one special character (!@#$% etc.)"
                 )
-                if st.form_submit_button("Create Account", use_container_width=True, type="primary"):
+                if st.form_submit_button("Create Account", use_container_width=True):
                     success, msg = register_user(user_signup, pass_signup)
                     if success:
                         st.success(msg)
