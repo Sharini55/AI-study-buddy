@@ -2,7 +2,7 @@ import os
 import hashlib
 import uuid
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime
+from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Storage directory for slide images (disk-based, never in DB rows)
@@ -15,15 +15,12 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 _DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-# Heroku/Azure sometimes return the legacy "postgres://" scheme;
-# SQLAlchemy 1.4+ requires "postgresql://"
 if _DATABASE_URL.startswith("postgres://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 if not _DATABASE_URL:
     _DATABASE_URL = "sqlite:///sundevil_ai.db"
 
-# SQLite needs check_same_thread=False; Postgres does not accept that arg
 _connect_args = {"check_same_thread": False} if _DATABASE_URL.startswith("sqlite") else {}
 
 engine = create_engine(_DATABASE_URL, connect_args=_connect_args)
@@ -37,130 +34,170 @@ Base = declarative_base()
 class User(Base):
     """Stores student login credentials and secure salted password hashes."""
     __tablename__ = "users"
-    
-    username = Column(String, primary_key=True)
+
+    username     = Column(String, primary_key=True)
     password_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Cascade deletes: If a user profile is deleted, delete all their workspaces
+    display_name = Column(String, nullable=True)   # real first name, set at signup step 2
+    email        = Column(String, nullable=True)   # reserved for future email auth
+    is_admin     = Column(Boolean, default=False, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
     workspaces = relationship("Workspace", back_populates="user", cascade="all, delete-orphan")
 
 
 class Workspace(Base):
     """Subject container (e.g., CSE 230) belonging to a specific student profile."""
     __tablename__ = "workspaces"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.username"), nullable=False)
+
+    id           = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id      = Column(String, ForeignKey("users.username"), nullable=False)
     subject_name = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    user = relationship("User", back_populates="workspaces")
-    files = relationship("SourceFile", back_populates="workspace", cascade="all, delete-orphan")
-    guides = relationship("StudyGuide", back_populates="workspace", cascade="all, delete-orphan")
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    user    = relationship("User", back_populates="workspaces")
+    files   = relationship("SourceFile",  back_populates="workspace", cascade="all, delete-orphan")
+    guides  = relationship("StudyGuide",  back_populates="workspace", cascade="all, delete-orphan")
     quizzes = relationship("QuizAttempt", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class SourceFile(Base):
     """Extracted text and metadata from PDF, PPTX, or pasted slides/textbooks."""
     __tablename__ = "source_files"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    id           = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
-    name = Column(String, nullable=False)
-    file_type = Column(String, nullable=False)  # 'pdf', 'pptx', 'text'
-    content_text = Column(Text, nullable=False)
-    file_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    workspace = relationship("Workspace", back_populates="files")
-    images = relationship("SourceImage", back_populates="source_file", cascade="all, delete-orphan")
+    name         = Column(String, nullable=False)
+    file_type    = Column(String, nullable=False)
+    content_text = Column(Text,   nullable=False)
+    file_hash    = Column(String, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    workspace = relationship("Workspace",   back_populates="files")
+    images    = relationship("SourceImage", back_populates="source_file", cascade="all, delete-orphan")
 
 
 class SourceImage(Base):
-    """Tracks slide diagram locations on disk (Faux Object Storage)."""
+    """Tracks slide diagram locations on disk."""
     __tablename__ = "source_images"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    id             = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     source_file_id = Column(String, ForeignKey("source_files.id"), nullable=False)
-    label = Column(String, nullable=False)
-    storage_path = Column(String, nullable=False)  # e.g., "./.storage/images/xyz.png"
-    mime_type = Column(String, nullable=False)
-    
+    label          = Column(String, nullable=False)
+    storage_path   = Column(String, nullable=False)
+    mime_type      = Column(String, nullable=False)
+
     source_file = relationship("SourceFile", back_populates="images")
 
 
 class StudyGuide(Base):
-    """Stores generated active recall guides formatted with the Physics Method."""
+    """Stores generated active recall guides."""
     __tablename__ = "study_guides"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    id           = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
-    title = Column(String, nullable=False)
-    content_md = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
+    title        = Column(String, nullable=False)
+    content_md   = Column(Text,   nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
     workspace = relationship("Workspace", back_populates="guides")
 
 
 class QuizAttempt(Base):
-    """Keeps records of student quiz attempts and performance telemetry."""
+    """Keeps records of student quiz attempts."""
     __tablename__ = "quiz_attempts"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    id           = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
-    score = Column(Integer, nullable=False)
-    quiz_json = Column(Text, nullable=False)     # Serialized JSON string of questions
-    answers_json = Column(Text, nullable=False)  # Serialized JSON string of student choices
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
+    score        = Column(Integer, nullable=False)
+    quiz_json    = Column(Text, nullable=False)
+    answers_json = Column(Text, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
     workspace = relationship("Workspace", back_populates="quizzes")
 
 
-# Build all local SQL tables on script initialization
+# Create any missing tables on startup (safe to run repeatedly)
 Base.metadata.create_all(bind=engine)
 
 # ---------------------------------------------------------------------------
-# Salted Password Security (Security Hardening)
+# Safe column migrations — each in its own connection so one failure
+# doesn't abort the others (PostgreSQL aborts the whole transaction on error)
+# ---------------------------------------------------------------------------
+
+def _safe_add_column(ddl: str) -> None:
+    """Run a single DDL statement, silently ignore 'column already exists'."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(ddl)          # type: ignore[arg-type]
+            conn.commit()
+    except Exception:
+        pass   # column already exists or SQLite no-op — both fine
+
+
+# Add columns introduced after initial deploy
+_safe_add_column("ALTER TABLE users ADD COLUMN display_name VARCHAR(100)")
+_safe_add_column("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
+_safe_add_column("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE")
+
+
+# ---------------------------------------------------------------------------
+# Salted Password Security
 # ---------------------------------------------------------------------------
 
 def hash_password(password: str) -> str:
-    """Generates a secure PBKDF2 salt-and-hash signature for student passwords."""
-    salt = os.urandom(16)
-    db_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    salt     = os.urandom(16)
+    db_hash  = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
     return salt.hex() + ":" + db_hash.hex()
 
 
 def verify_password(stored_signature: str, provided_password: str) -> bool:
-    """Authenticates raw password input against stored database signature."""
     try:
         salt_hex, hash_hex = stored_signature.split(":")
-        salt = bytes.fromhex(salt_hex)
+        salt    = bytes.fromhex(salt_hex)
         db_hash = bytes.fromhex(hash_hex)
-        test_hash = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
-        return test_hash == db_hash
+        test    = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
+        return test == db_hash
     except Exception:
         return False
+
 
 # ---------------------------------------------------------------------------
 # Faux Object Storage Helpers
 # ---------------------------------------------------------------------------
 
 def save_uploaded_image_locally(image_bytes: bytes, file_hash: str, index: int) -> str:
-    """Writes heavy raw slide images directly to disk instead of bloating database rows."""
-    filename = f"{file_hash}_{index}.png"
+    filename         = f"{file_hash}_{index}.png"
     destination_path = os.path.join(STORAGE_DIR, filename)
-    
     if not os.path.exists(destination_path):
         with open(destination_path, "wb") as f:
             f.write(image_bytes)
-            
     return destination_path
 
 
 def load_local_image_bytes(storage_path: str) -> bytes:
-    """Retrieves original image bytes from file storage during generation runs."""
     if os.path.exists(storage_path):
         with open(storage_path, "rb") as f:
             return f.read()
     return b""
+
+
+# ---------------------------------------------------------------------------
+# Workspace helpers
+# ---------------------------------------------------------------------------
+
+def delete_workspace_from_db(username: str, workspace_id: str) -> None:
+    """Permanently deletes a workspace and all its children (files, guides, quizzes)."""
+    db = SessionLocal()
+    try:
+        ws = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.user_id == username
+        ).first()
+        if ws:
+            db.delete(ws)
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
