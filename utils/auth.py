@@ -1,8 +1,11 @@
 import re
 import time
+import logging
 import streamlit as st
 from utils.persistence import SessionLocal, User, hash_password, verify_password
 from utils.analytics import capture, identify
+
+logger = logging.getLogger(__name__)
 
 
 def init_auth_session_state():
@@ -50,8 +53,11 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
         new_user = User(username=username, password_hash=hash_password(password))
         db.add(new_user)
         db.commit()
-        capture("user_signed_up", username, {"username": username})
-        identify(username, {"username": username})
+        try:
+            capture("user_signed_up", username, {"username": username})
+            identify(username, {"username": username})
+        except Exception:
+            logger.warning("Signup analytics failed for user '%s'.", username, exc_info=True)
         return True, "Account created! You can now log in."
     except Exception as e:
         db.rollback()
@@ -75,8 +81,11 @@ def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
         if verify_password(user_record.password_hash, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
-            capture("user_logged_in", username, {"username": username})
-            identify(username, {"username": username})
+            try:
+                capture("user_logged_in", username, {"username": username})
+                identify(username, {"username": username})
+            except Exception:
+                logger.warning("Login analytics failed for user '%s'.", username, exc_info=True)
             return True, "Login successful!"
         return False, "Invalid username or password."
     except Exception as e:

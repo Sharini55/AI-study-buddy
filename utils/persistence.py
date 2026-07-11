@@ -1,5 +1,6 @@
 import os
 import hashlib
+import hmac
 import uuid
 from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
@@ -153,14 +154,28 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(stored_signature: str, provided_password: str) -> bool:
-    try:
-        salt_hex, hash_hex = stored_signature.split(":")
-        salt    = bytes.fromhex(salt_hex)
-        db_hash = bytes.fromhex(hash_hex)
-        test    = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
-        return test == db_hash
-    except Exception:
+    if not stored_signature or provided_password is None:
         return False
+
+    try:
+        password_bytes = provided_password.encode("utf-8")
+
+        if ":" in stored_signature:
+            salt_hex, hash_hex = stored_signature.split(":", 1)
+            salt    = bytes.fromhex(salt_hex)
+            db_hash = bytes.fromhex(hash_hex)
+            test    = hashlib.pbkdf2_hmac("sha256", password_bytes, salt, 100000)
+            return hmac.compare_digest(test, db_hash)
+
+        # Backward compatibility for early local accounts that were stored as
+        # unsalted SHA-256 hex digests before PBKDF2 was introduced.
+        if len(stored_signature) == 64:
+            legacy_hash = hashlib.sha256(password_bytes).hexdigest()
+            return hmac.compare_digest(legacy_hash, stored_signature.lower())
+    except (TypeError, ValueError):
+        return False
+
+    return False
 
 
 # ---------------------------------------------------------------------------
