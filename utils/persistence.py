@@ -2,7 +2,7 @@ import os
 import hashlib
 import uuid
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean
+from sqlalchemy import create_engine, Column, String, Integer, Text, ForeignKey, DateTime, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Storage directory for slide images (disk-based, never in DB rows)
@@ -97,6 +97,7 @@ class StudyGuide(Base):
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
     title        = Column(String, nullable=False)
     content_md   = Column(Text,   nullable=False)
+    guide_hash   = Column(String, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     workspace = relationship("Workspace", back_populates="guides")
@@ -128,7 +129,7 @@ def _safe_add_column(ddl: str) -> None:
     """Run a single DDL statement, silently ignore 'column already exists'."""
     try:
         with engine.connect() as conn:
-            conn.execute(ddl)          # type: ignore[arg-type]
+            conn.execute(text(ddl))
             conn.commit()
     except Exception:
         pass   # column already exists or SQLite no-op — both fine
@@ -138,6 +139,7 @@ def _safe_add_column(ddl: str) -> None:
 _safe_add_column("ALTER TABLE users ADD COLUMN display_name VARCHAR(100)")
 _safe_add_column("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
 _safe_add_column("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE")
+_safe_add_column("ALTER TABLE study_guides ADD COLUMN guide_hash VARCHAR(64)")
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import os
 import streamlit as st
 
 logger = logging.getLogger(__name__)
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 # Configuration & Subsystem Imports
@@ -791,8 +792,11 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                 if all_guides:
                     ws_data["generated_notes"] = all_guides[0].content_md
                 for g in all_guides:
+                    guide_id = g.guide_hash or hashlib.sha256(
+                        g.content_md.encode("utf-8")
+                    ).hexdigest()[:12]
                     saved_guides.append({
-                        "id": g.guide_hash or g.id[:12],
+                        "id": guide_id,
                         "title": g.title,
                         "subject": ws.subject_name,
                         "content": g.content_md,
@@ -871,7 +875,10 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                 continue
             existing_guide = db.query(StudyGuide).filter(
                 StudyGuide.workspace_id == ws_row.id,
-                StudyGuide.guide_hash == guide["id"],
+                or_(
+                    StudyGuide.guide_hash == guide["id"],
+                    StudyGuide.content_md == guide["content"],
+                ),
             ).first()
             if not existing_guide:
                 db.add(StudyGuide(

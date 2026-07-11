@@ -99,6 +99,7 @@ def upgrade() -> None:
         sa.Column("workspace_id", sa.String(),  sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
         sa.Column("title",        sa.String(),  nullable=False),
         sa.Column("content_md",   sa.Text(),    nullable=False),
+        sa.Column("guide_hash",   sa.String(length=64), nullable=True),
         sa.Column("created_at",   sa.DateTime(), nullable=True),
     )
     op.create_index("ix_study_guides_workspace_id", "study_guides", ["workspace_id"])
