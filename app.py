@@ -311,9 +311,7 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        /* Browse / Upload button — yellow pill, "Upload" injected via ::after.
-           All native child content (span, p, div) is zeroed out so Streamlit's
-           internal hidden "upload" span cannot double-render alongside the label. */
+        /* Browse / Upload button */
         [data-testid="stFileUploaderDropzone"] button {
             position:      relative !important;
             background:    var(--yellow) !important;
@@ -550,12 +548,7 @@ def apply_theme() -> None:
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar collapse button (inside sidebar) ────────────────────────
-           Fixed 42×42 box prevents micro-bar collapse.
-           All native inner content (SVG, icon span, p) is made transparent
-           so nothing bleeds through. The glyph is injected via ::after
-           as an absolutely centred overlay — no relative-position text hack.
-        ── */
+        /* ── Sidebar collapse button ── */
         [data-testid="stSidebarCollapseButton"] button {
             position:      relative !important;
             width:         42px !important;
@@ -569,7 +562,6 @@ def apply_theme() -> None:
             cursor:        pointer !important;
             overflow:      hidden !important;
         }
-        /* Make all native child content invisible without removing its layout */
         [data-testid="stSidebarCollapseButton"] button svg,
         [data-testid="stSidebarCollapseButton"] button span,
         [data-testid="stSidebarCollapseButton"] button p,
@@ -579,7 +571,6 @@ def apply_theme() -> None:
             opacity:    0 !important;
             user-select: none !important;
         }
-        /* Centred « glyph overlay */
         [data-testid="stSidebarCollapseButton"] button::after {
             content:    "«";
             position:   absolute !important;
@@ -593,7 +584,7 @@ def apply_theme() -> None:
             pointer-events: none !important;
         }
 
-        /* ── Sidebar expand button (toolbar, sidebar collapsed) ───────────── */
+        /* ── Sidebar expand button ── */
         [data-testid="stExpandSidebarButton"] button {
             position:      relative !important;
             width:         42px !important;
@@ -635,11 +626,9 @@ def apply_theme() -> None:
         }
 
         /* ── Study guide expanders ── */
-        /* Remove browser native disclosure marker */
         details > summary { list-style: none !important; }
         details > summary::-webkit-details-marker { display: none !important; }
 
-        /* Expander container: white bg, green left accent */
         div[data-testid="stExpander"] {
             background:    var(--panel) !important;
             border:        1.5px solid var(--line) !important;
@@ -648,7 +637,6 @@ def apply_theme() -> None:
             margin-bottom: 0.5rem !important;
         }
 
-        /* Expander summary row: clean light bg, no orange */
         div[data-testid="stExpander"] details summary {
             background:    var(--sidebar) !important;
             border-radius: 10px !important;
@@ -660,7 +648,6 @@ def apply_theme() -> None:
             border-bottom:  1px solid var(--line) !important;
         }
 
-        /* Hide Streamlit's Material icon text; replace with CSS chevron */
         div[data-testid="stExpander"] details summary [data-testid="stIconMaterial"],
         div[data-testid="stExpander"] details summary svg { display: none !important; }
 
@@ -679,7 +666,6 @@ def apply_theme() -> None:
             transform: rotate(90deg);
         }
 
-        /* Expander body padding */
         div[data-testid="stExpander"] details > div {
             padding: 0.75rem 1rem !important;
         }
@@ -702,28 +688,21 @@ def apply_theme() -> None:
                     if (!p) return;
                     var txt = p.textContent.trim();
 
-                    // Nav icons
                     var iconCls = NAV_ICONS[txt];
                     if (iconCls && !p.querySelector('i.ti')) {
                         var i = document.createElement('i');
                         i.className = 'ti ' + iconCls;
-                        p.insertBefore(document.createTextNode(' '), p.firstChild);
+                        p.insertBefore(document.createTextNode(' '), p.firstChild);
                         p.insertBefore(i, p.firstChild);
                     }
 
-                    // Study mode toggle classes
                     if (txt === 'Deep Mode')  btn.classList.add('mode-btn-left');
                     if (txt === 'Cram Mode')  btn.classList.add('mode-btn-right');
 
-                    // Footer link classes
                     if (txt === 'Settings' || txt === 'Log Out') btn.classList.add('sb-footer-link');
                 });
             }
 
-            // Fix file-uploader button: Streamlit injects a hidden "upload" span
-            // before the visible <p>Upload</p>. Our global span colour rule makes
-            // it visible, producing "uploadUpload". Collapse any leaf span whose
-            // text is exactly "upload" so only the <p> label remains.
             function fixFileUploaderBtn() {
                 document.querySelectorAll(
                     '[data-testid="stFileUploaderDropzone"] button'
@@ -746,7 +725,6 @@ def apply_theme() -> None:
             _mo.observe(document.body, {childList: true, subtree: true});
             _runAll();
 
-            // Auto-restore API key from localStorage
             var _restored = false;
             function restoreApiKey() {
                 if (_restored) return;
@@ -786,7 +764,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
             for ws in user_record.workspaces:
                 ws_data = blank_workspace()
                 ws_data["id"] = ws.id
-                
+
                 for file_row in ws.files:
                     images_list = []
                     for img_row in file_row.images:
@@ -796,7 +774,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                             "bytes": img_bytes,
                             "mime_type": img_row.mime_type
                         })
-                    
+
                     ws_data["files"].append({
                         "id": file_row.id,
                         "name": file_row.name,
@@ -804,9 +782,9 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                         "content": file_row.content_text,
                         "images": images_list
                     })
-                
+
                 refresh_processed_text(ws_data)
-                
+
                 all_guides = db.query(StudyGuide).filter(
                     StudyGuide.workspace_id == ws.id
                 ).order_by(StudyGuide.created_at.desc()).all()
@@ -820,7 +798,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                         "content": g.content_md,
                         "saved_at": g.created_at.strftime("%b %d, %H:%M") if g.created_at else "",
                     })
-                
+
                 for quiz_row in ws.quizzes:
                     try:
                         questions = json.loads(quiz_row.quiz_json)
@@ -837,7 +815,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                         })
                     except Exception:
                         continue
-                        
+
                 workspaces_dict[ws.subject_name] = ws_data
     finally:
         db.close()
@@ -847,18 +825,24 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
 def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dict):
     db: Session = SessionLocal()
     try:
-        ws_row = db.query(Workspace).filter(Workspace.user_id == username, Workspace.subject_name == subject_name).first()
+        ws_row = db.query(Workspace).filter(
+            Workspace.user_id == username,
+            Workspace.subject_name == subject_name
+        ).first()
         if not ws_row:
             ws_row = Workspace(user_id=username, subject_name=subject_name)
             db.add(ws_row)
             db.commit()
             db.refresh(ws_row)
-            
+
         ws_memory["id"] = ws_row.id
-        
+
         for file_item in ws_memory.get("files", []):
             content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
-            existing_file = db.query(SourceFile).filter(SourceFile.workspace_id == ws_row.id, SourceFile.file_hash == content_hash).first()
+            existing_file = db.query(SourceFile).filter(
+                SourceFile.workspace_id == ws_row.id,
+                SourceFile.file_hash == content_hash
+            ).first()
             if not existing_file:
                 new_file = SourceFile(
                     workspace_id=ws_row.id,
@@ -870,7 +854,7 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                 db.add(new_file)
                 db.commit()
                 db.refresh(new_file)
-                
+
                 for idx, img_item in enumerate(file_item.get("images", [])):
                     storage_path = save_uploaded_image_locally(img_item["bytes"], content_hash, idx)
                     new_img = SourceImage(
@@ -881,7 +865,7 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                     )
                     db.add(new_img)
                 db.commit()
-                
+
         for guide in st.session_state.get("saved_guides", []):
             if guide.get("subject") != subject_name:
                 continue
@@ -897,8 +881,10 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                     guide_hash=guide["id"],
                 ))
         db.commit()
-            
-        stored_attempts_count = db.query(QuizAttempt).filter(QuizAttempt.workspace_id == ws_row.id).count()
+
+        stored_attempts_count = db.query(QuizAttempt).filter(
+            QuizAttempt.workspace_id == ws_row.id
+        ).count()
         memory_history = ws_memory.get("quiz_history", [])
         if len(memory_history) > stored_attempts_count:
             for attempt in memory_history[stored_attempts_count:]:
@@ -910,7 +896,7 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
                 )
                 db.add(new_attempt)
             db.commit()
-            
+
     except Exception:
         db.rollback()
         logger.error("save_active_workspace_to_db failed (user=%s, subject=%s)", username, subject_name, exc_info=True)
@@ -936,7 +922,6 @@ def _sb_section(label: str) -> None:
 
 def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str, str, str]:
     with st.sidebar:
-        # ── User avatar ────────────────────────────────────────────────────
         initial = (username[0].upper()) if username else "?"
         st.markdown(
             f"""
@@ -972,7 +957,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 st.session_state["admin_view"] = not in_admin
                 st.rerun()
 
-        # ── Navigation ─────────────────────────────────────────────────────
         _sb_section("Navigation")
         current_page = st.session_state.get("current_page", "Dashboard")
         nav_pages = ["Dashboard", "Study guide", "Quiz", "Saved Guides"]
@@ -984,7 +968,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 st.session_state["viewing_guide"] = None
                 st.rerun()
 
-        # ── Workspaces ─────────────────────────────────────────────────────
         _sb_section("Workspaces")
         subjects = list(st.session_state["workspaces"].keys())
         active = st.session_state.get("active_workspace", subjects[0])
@@ -1000,7 +983,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 selected = ws_name
                 st.rerun()
 
-        # Inline rename UI
         if st.session_state.get("_rename_ws_open"):
             new_name = st.text_input(
                 "Rename", value=active, key="_rename_ws_val",
@@ -1022,7 +1004,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                     st.session_state["_rename_ws_open"] = False
                     st.rerun()
 
-        # Add / Rename / Delete row
         c_add, c_ren, c_del = st.columns([4, 1, 1])
         with c_add:
             if st.button("＋ Add Workspace", key="_add_ws_toggle", use_container_width=True):
@@ -1069,7 +1050,9 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                     if st.button("Yes", key="_del_ws_yes", type="primary", use_container_width=True):
                         ws_id = st.session_state["workspaces"][active].get("id")
                         if ws_id:
-                            delete_workspace_from_db(ws_id, owner_username=username)
+                            # FIX: corrected argument order to match function signature
+                            # delete_workspace_from_db(username: str, workspace_id: str)
+                            delete_workspace_from_db(username=username, workspace_id=ws_id)
                         del st.session_state["workspaces"][active]
                         st.session_state["active_workspace"] = next(
                             iter(st.session_state["workspaces"])
@@ -1081,7 +1064,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                         st.session_state["_confirm_del_ws"] = False
                         st.rerun()
 
-        # ── Study Modes — segmented toggle ─────────────────────────────────
         _sb_section("Study Modes")
         study_mode = st.session_state.get("_study_mode", "Deep Dive")
         c_deep, c_cram = st.columns(2)
@@ -1096,7 +1078,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                 st.session_state["_study_mode"] = "Cram Mode"
                 st.rerun()
 
-        # ── Footer: Settings + Log Out ─────────────────────────────────────
         st.divider()
         c_set, c_out = st.columns(2)
         with c_set:
@@ -1132,7 +1113,6 @@ def render_settings_page(current_user: str) -> None:
     )
     st.caption(f"Logged in as **{current_user}**")
 
-    # Account stats
     workspaces   = st.session_state.get("workspaces", {})
     saved_guides = st.session_state.get("saved_guides", [])
     ws_count     = len(workspaces)
@@ -1145,7 +1125,6 @@ def render_settings_page(current_user: str) -> None:
 
     st.divider()
 
-    # ── Gemini API Key ──────────────────────────────────────────────────────
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔑 Gemini API Key</h3>",
         unsafe_allow_html=True,
@@ -1179,7 +1158,6 @@ def render_settings_page(current_user: str) -> None:
 
     st.divider()
 
-    # ── Change Password ─────────────────────────────────────────────────────
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔒 Change Password</h3>",
         unsafe_allow_html=True,
@@ -1220,7 +1198,6 @@ def render_settings_page(current_user: str) -> None:
 
     st.divider()
 
-    # ── Log Out ─────────────────────────────────────────────────────────────
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🚪 Log Out</h3>",
         unsafe_allow_html=True,
@@ -1231,7 +1208,6 @@ def render_settings_page(current_user: str) -> None:
 
     st.divider()
 
-    # ── Danger Zone ─────────────────────────────────────────────────────────
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>⚠️ Danger Zone</h3>",
         unsafe_allow_html=True,
@@ -1296,9 +1272,6 @@ def render_admin_dashboard(current_user: str) -> None:
     from utils.metrics import _report_path, _METRICS_DIR
     import pandas as pd
 
-    # ── Server-side admin verification ────────────────────────────────────────
-    # Session state flags can be spoofed; re-query the DB every time this
-    # page renders to confirm the account truly has is_admin=True.
     _db_check = SessionLocal()
     try:
         _user_row = _db_check.query(User).filter(User.username == current_user).first()
@@ -1311,9 +1284,7 @@ def render_admin_dashboard(current_user: str) -> None:
 
     if not _confirmed_admin:
         st.error("Access denied.")
-        logger.warning(
-            "Admin dashboard access attempt by non-admin user '%s'", current_user
-        )
+        logger.warning("Admin dashboard access attempt by non-admin user '%s'", current_user)
         return
 
     st.title("🛠 Admin Dashboard")
@@ -1377,7 +1348,7 @@ def render_admin_dashboard(current_user: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main Execution Entrypoint
+# Saved Guides page
 # ---------------------------------------------------------------------------
 
 def render_saved_guides_page() -> None:
@@ -1416,6 +1387,10 @@ def render_saved_guides_page() -> None:
                 ]
                 st.rerun()
 
+
+# ---------------------------------------------------------------------------
+# Main Execution Entrypoint
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     st.set_page_config(
@@ -1457,7 +1432,6 @@ def main() -> None:
 
     subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin)
 
-    # Settings page
     if st.session_state.get("current_page") == "Settings" or st.session_state.get("viewing_profile"):
         render_settings_page(current_user)
         return
@@ -1481,7 +1455,6 @@ def main() -> None:
     from tabs.ingest import render_ingest_tab
     from tabs.study import render_study_tab
     from tabs.quiz import render_quiz_tab
-    #from tabs.saved_guides_view import render_saved_guides_tab  # Optional fallback view file if desired
 
     if current_page == "Saved Guides":
         render_saved_guides_page()
@@ -1518,7 +1491,6 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-        # API key onboarding banner — only on AI-dependent pages
         if (not st.session_state.get("gemini_api_key")
                 and not st.session_state.get("_api_key_banner_dismissed")):
             st.markdown(
