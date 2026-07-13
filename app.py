@@ -5,6 +5,7 @@ import os
 import streamlit as st
 
 logger = logging.getLogger(__name__)
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 # Configuration & Subsystem Imports
@@ -16,7 +17,7 @@ from utils.persistence import (
 from utils.files import blank_workspace, refresh_processed_text
 from utils.guide import render_guide
 
-APP_TITLE = "SunDevil AI"
+APP_TITLE = "AI Study Buddy"
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +31,6 @@ def apply_theme() -> None:
         /* ── Icon fonts ── */
         @import url('https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css');
         @import url('https://fonts.googleapis.com/css2?family=Truculenta:opsz,wght@12..72,100..900&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
 
         /* ── Design tokens ── */
         :root {
@@ -57,21 +57,6 @@ def apply_theme() -> None:
         [data-testid="stMetricValue"],
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
             font-family: 'Truculenta', sans-serif !important;
-        }
-        span[data-testid="stIconMaterial"],
-        [data-testid="stTextInput"] button span[data-testid="stIconMaterial"],
-        div[data-baseweb="input"] button span[data-testid="stIconMaterial"] {
-            font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important;
-            font-size: 20px !important;
-            font-weight: 400 !important;
-            line-height: 1 !important;
-            letter-spacing: normal !important;
-            text-transform: none !important;
-            white-space: nowrap !important;
-            word-wrap: normal !important;
-            direction: ltr !important;
-            color: var(--ink) !important;
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24 !important;
         }
 
         /* ── Strip Streamlit chrome ── */
@@ -218,14 +203,10 @@ def apply_theme() -> None:
         div[data-testid="stTabs"] button[role="tab"] {
             border-radius: 999px;
             padding: 10px 20px;
-            color: var(--ink) !important;
+            color: var(--ink);
             font-family: 'Truculenta', sans-serif !important;
             font-weight: 600;
             transition: background 0.15s;
-        }
-        div[data-testid="stTabs"] button[role="tab"] p,
-        div[data-testid="stTabs"] button[role="tab"] span {
-            color: var(--ink) !important;
         }
         div[data-testid="stTabs"] button[aria-selected="true"] {
             background: var(--green) !important;
@@ -236,11 +217,6 @@ def apply_theme() -> None:
         div[data-testid="stTabs"] button[aria-selected="true"] span { color: #FFFFFF !important; }
         div[data-testid="stTabs"] button[aria-selected="false"]:hover {
             background: #DFE9C8 !important;
-        }
-        div[data-testid="stTabs"] button[aria-selected="false"],
-        div[data-testid="stTabs"] button[aria-selected="false"] p,
-        div[data-testid="stTabs"] button[aria-selected="false"] span {
-            color: var(--ink) !important;
         }
 
         /* ── All non-sidebar buttons — secondary (white) ── */
@@ -316,22 +292,6 @@ def apply_theme() -> None:
         [data-testid="stBaseButton-secondary"] p,
         [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
 
-        /* Re-apply sidebar contrast after the global button overrides above. */
-        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"],
-        [data-testid="stSidebar"] [data-testid="baseButton-primary"] {
-            background: #8C1D40 !important;
-            border-color: #8C1D40 !important;
-            color: #FFFFFF !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] *,
-        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] p,
-        [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] span,
-        [data-testid="stSidebar"] [data-testid="baseButton-primary"] *,
-        [data-testid="stSidebar"] [data-testid="baseButton-primary"] p,
-        [data-testid="stSidebar"] [data-testid="baseButton-primary"] span {
-            color: #FFFFFF !important;
-        }
-
         /* ── File uploader ── */
         [data-testid="stFileUploader"] {
             background: #FFFFFF !important;
@@ -354,14 +314,14 @@ def apply_theme() -> None:
 
         /* Browse / Upload button */
         [data-testid="stFileUploaderDropzone"] button {
-            position: relative !important;
-            background: var(--yellow) !important;
-            border: none !important;
+            position:      relative !important;
+            background:    var(--yellow) !important;
+            border:        none !important;
             border-radius: 999px !important;
-            padding: 6px 28px !important;
-            min-width: 90px !important;
-            min-height: 36px !important;
-            cursor: pointer !important;
+            padding:       6px 28px !important;
+            min-width:     90px !important;
+            min-height:    36px !important;
+            cursor:        pointer !important;
         }
         [data-testid="stFileUploaderDropzone"] button span,
         [data-testid="stFileUploaderDropzone"] button p,
@@ -468,30 +428,23 @@ def apply_theme() -> None:
 
         /* ── Form submit buttons — green fill, white text ── */
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"],
-        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"],
-        [data-testid="stFormSubmitButton"] button {
-            background: #8C1D40 !important;
-            border-color: #8C1D40 !important;
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] {
+            background: var(--green) !important;
+            border-color: var(--green) !important;
             color: #FFFFFF !important;
             font-weight: 700 !important;
             border-radius: 999px !important;
         }
-        [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"] *,
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"] p,
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"] span,
-        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] *,
         [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] p,
-        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] span,
-        [data-testid="stFormSubmitButton"] button *,
-        [data-testid="stFormSubmitButton"] button p,
-        [data-testid="stFormSubmitButton"] button span {
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] span {
             color: #FFFFFF !important;
         }
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"]:hover,
-        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"]:hover,
-        [data-testid="stFormSubmitButton"] button:hover {
-            background: #6E1532 !important;
-            border-color: #6E1532 !important;
+        [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"]:hover {
+            background: var(--green-dark) !important;
+            border-color: var(--green-dark) !important;
         }
 
         /* ── Metric cards — force dark text (profile/settings page) ── */
@@ -513,18 +466,6 @@ def apply_theme() -> None:
         div[data-testid="stAlert"] li,
         div[data-testid="stAlert"] a,
         div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] {
-            color: var(--ink) !important;
-        }
-
-        /* Dashboard/history text should remain readable on the light workspace. */
-        .main [data-testid="stMarkdownContainer"],
-        .main [data-testid="stMarkdownContainer"] p,
-        .main [data-testid="stMarkdownContainer"] span,
-        .main [data-testid="stMarkdownContainer"] li,
-        .main [data-testid="stCaptionContainer"],
-        .main [data-testid="stCaptionContainer"] *,
-        .main label,
-        .main label p {
             color: var(--ink) !important;
         }
 
@@ -610,16 +551,15 @@ def apply_theme() -> None:
 
         /* ── Sidebar collapse button ── */
         [data-testid="stSidebarCollapseButton"] button {
-            position: relative !important;
+            position:      relative !important;
             width:         42px !important;
             height:        42px !important;
             min-width:     42px !important;
             min-height:    42px !important;
             line-height:   42px !important;
             padding:       0 !important;
-            background:    #FFFFFF !important;
-            border:        1.5px solid var(--ink) !important;
-            border-radius: 999px !important;
+            background:    transparent !important;
+            border:        none !important;
             cursor:        pointer !important;
             overflow:      hidden !important;
         }
@@ -641,21 +581,21 @@ def apply_theme() -> None:
             justify-content: center !important;
             font-size:  1.35rem !important;
             font-weight: 700 !important;
-            color:      #000000 !important;
+            color:      var(--ink) !important;
             pointer-events: none !important;
         }
 
         /* ── Sidebar expand button ── */
         [data-testid="stExpandSidebarButton"] button {
-            position: relative !important;
+            position:      relative !important;
             width:         42px !important;
             height:        42px !important;
             min-width:     42px !important;
             min-height:    42px !important;
             line-height:   42px !important;
             padding:       0 !important;
-            background:    #FFFFFF !important;
-            border:        1.5px solid var(--ink) !important;
+            background:    var(--yellow) !important;
+            border:        none !important;
             border-radius: 0 10px 10px 0 !important;
             cursor:        pointer !important;
             overflow:      hidden !important;
@@ -678,7 +618,7 @@ def apply_theme() -> None:
             justify-content: center !important;
             font-size:  1.35rem !important;
             font-weight: 700 !important;
-            color:      #000000 !important;
+            color:      var(--ink) !important;
             pointer-events: none !important;
         }
 
@@ -731,85 +671,7 @@ def apply_theme() -> None:
             padding: 0.75rem 1rem !important;
         }
 
-        /* ── Final accessibility overrides ── */
-        /* These prevent Streamlit's dark mode properties from accidentally flipping text colors */
-        .main p, .main span, .main label, .main h1, .main h2, .main h3 {
-            color: var(--ink) !important;
-            opacity: 1 !important;
-        }
-
-        /* 🔧 FIXED: Ensure tab navigation labels inside the authentication menu stay clear */
-        [data-testid="stTabs"] [role="tablist"] button p {
-            color: inherit !important;
-        }
-        
-        /* Smooth transitions for inputs */
-        input, textarea, select {
-            transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
-        }
-
-        [data-testid="stFileUploaderDropzone"],
-        [data-testid="stFileUploaderDropzone"] *,
-        [data-testid="stFileUploader"] label,
-        [data-testid="stFileUploader"] label *,
-        [data-testid="stFileUploader"] small {
-            opacity: 1 !important;
-        }
-
-        [data-testid="stTextInput"] input,
-        div[data-baseweb="input"] input,
-        [data-testid="stTextArea"] textarea,
-        div[data-baseweb="textarea"] textarea {
-            color: var(--ink) !important;
-            -webkit-text-fill-color: var(--ink) !important;
-            opacity: 1 !important;
-        }
-
-        [data-testid="stTextInput"] button,
-        div[data-baseweb="input"] button {
-            background: transparent !important;
-            border: 0 !important;
-            box-shadow: none !important;
-            color: transparent !important;
-            min-width: 2.25rem !important;
-            overflow: hidden !important;
-            position: relative !important;
-        }
-
-        [data-testid="stTextInput"] button *,
-        div[data-baseweb="input"] button * {
-            color: transparent !important;
-            -webkit-text-fill-color: transparent !important;
-            opacity: 0 !important;
-            font-size: 0 !important;
-        }
-
-        [data-testid="stTextInput"] button::after,
-        div[data-baseweb="input"] button::after {
-            content: "○" !important;
-            position: absolute !important;
-            inset: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            color: var(--ink) !important;
-            -webkit-text-fill-color: var(--ink) !important;
-            opacity: 1 !important;
-            font-size: 1.05rem !important;
-            font-family: Arial, sans-serif !important;
-            font-weight: 700 !important;
-            pointer-events: none !important;
-        }
-
-        .main .block-container h1,
-        .main .block-container h1 *,
-        .main .block-container h2,
-        .main .block-container h2 * {
-            color: var(--ink) !important;
-            opacity: 1 !important;
-        }
         </style>
-
         <script>
         (function() {
             var NAV_ICONS = {
@@ -822,11 +684,11 @@ def apply_theme() -> None:
             function initSidebar() {
                 var sidebar = document.querySelector('[data-testid="stSidebar"]');
                 if (!sidebar) return;
-
                 sidebar.querySelectorAll('button').forEach(function(btn) {
                     var p = btn.querySelector('p');
                     if (!p) return;
                     var txt = p.textContent.trim();
+
                     var iconCls = NAV_ICONS[txt];
                     if (iconCls && !p.querySelector('i.ti')) {
                         var i = document.createElement('i');
@@ -834,30 +696,50 @@ def apply_theme() -> None:
                         p.insertBefore(document.createTextNode(' '), p.firstChild);
                         p.insertBefore(i, p.firstChild);
                     }
+
+                    if (txt === 'Deep Mode')  btn.classList.add('mode-btn-left');
+                    if (txt === 'Cram Mode')  btn.classList.add('mode-btn-right');
+
+                    if (txt === 'Settings' || txt === 'Log Out') btn.classList.add('sb-footer-link');
                 });
             }
 
-            var _amo = new MutationObserver(initSidebar);
-            _amo.observe(document.body, {childList: true, subtree: true});
-            setTimeout(initSidebar, 400);
-        })();
-        </script>
+            function fixFileUploaderBtn() {
+                document.querySelectorAll(
+                    '[data-testid="stFileUploaderDropzone"] button'
+                ).forEach(function(btn) {
+                    btn.querySelectorAll('span').forEach(function(s) {
+                        if (s.children.length === 0 &&
+                            s.textContent.trim().toLowerCase() === 'upload') {
+                            s.style.setProperty('font-size',  '0',            'important');
+                            s.style.setProperty('width',      '0',            'important');
+                            s.style.setProperty('height',     '0',            'important');
+                            s.style.setProperty('overflow',   'hidden',       'important');
+                            s.style.setProperty('display',    'inline-block', 'important');
+                        }
+                    });
+                });
+            }
 
-        <script>
-        (function() {
+            function _runAll() { initSidebar(); fixFileUploaderBtn(); }
+            var _mo = new MutationObserver(_runAll);
+            _mo.observe(document.body, {childList: true, subtree: true});
+            _runAll();
+
+            var _restored = false;
             function restoreApiKey() {
-                var kInput = document.querySelector('[data-testid="stTextInput"] input[type="password"]');
-                if (!kInput) return;
-                var saved = localStorage.getItem('_gemini_cached_api_key');
-                if (saved && !kInput.value) {
-                    kInput.value = saved;
-                    kInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    var btn = kInput.closest('form')?.querySelector('button[type="submit"]') || 
-                              document.querySelector('[data-testid="stFormSubmitButton"] button');
-                    if (btn) {
-                        setTimeout(function() { btn.click(); }, 150);
-                    }
-                }
+                if (_restored) return;
+                var stored = localStorage.getItem('gemini_api_key');
+                if (!stored) return;
+                var inp = Array.from(document.querySelectorAll('input[type="password"]'))
+                              .find(function(i) { return i.placeholder && i.placeholder.toLowerCase().indexOf('gemini') !== -1; });
+                if (!inp || inp.value) { _restored = !!inp; return; }
+                try {
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(inp, stored);
+                    inp.dispatchEvent(new Event('input', {bubbles: true}));
+                    _restored = true;
+                } catch(e) {}
             }
             var _amo = new MutationObserver(restoreApiKey);
             _amo.observe(document.body, {childList: true, subtree: true});
@@ -883,6 +765,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
             for ws in user_record.workspaces:
                 ws_data = blank_workspace()
                 ws_data["id"] = ws.id
+
                 for file_row in ws.files:
                     images_list = []
                     for img_row in file_row.images:
@@ -892,6 +775,7 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                             "bytes": img_bytes,
                             "mime_type": img_row.mime_type
                         })
+
                     ws_data["files"].append({
                         "id": file_row.id,
                         "name": file_row.name,
@@ -899,18 +783,20 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                         "content": file_row.content_text,
                         "images": images_list
                     })
+
                 refresh_processed_text(ws_data)
 
                 all_guides = db.query(StudyGuide).filter(
                     StudyGuide.workspace_id == ws.id
                 ).order_by(StudyGuide.created_at.desc()).all()
-                
                 if all_guides:
                     ws_data["generated_notes"] = all_guides[0].content_md
-                
                 for g in all_guides:
+                    guide_id = g.guide_hash or hashlib.sha256(
+                        g.content_md.encode("utf-8")
+                    ).hexdigest()[:12]
                     saved_guides.append({
-                        "id": g.guide_hash or g.id[:12],
+                        "id": guide_id,
                         "title": g.title,
                         "subject": ws.subject_name,
                         "content": g.content_md,
@@ -920,8 +806,8 @@ def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
                 for quiz_row in ws.quizzes:
                     try:
                         questions = json.loads(quiz_row.quiz_json)
-                        answers = json.loads(quiz_row.answers_json)
-                        missed = [
+                        answers   = json.loads(quiz_row.answers_json)
+                        missed    = [
                             q for i, q in enumerate(questions)
                             if answers.get(str(i)) != q.get("answer_index")
                         ]
@@ -955,94 +841,73 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
 
         ws_memory["id"] = ws_row.id
 
-        current_file_ids = []
-        for f in ws_memory.get("files", []):
-            f_row = None
-            if f.get("id"):
-                f_row = db.query(SourceFile).filter(SourceFile.id == f["id"]).first()
-            
-            if not f_row:
-                f_row = SourceFile(
+        for file_item in ws_memory.get("files", []):
+            content_hash = hashlib.sha256(file_item["content"].encode("utf-8")).hexdigest() if file_item["content"] else "empty"
+            existing_file = db.query(SourceFile).filter(
+                SourceFile.workspace_id == ws_row.id,
+                SourceFile.file_hash == content_hash
+            ).first()
+            if not existing_file:
+                new_file = SourceFile(
                     workspace_id=ws_row.id,
-                    name=f["name"],
-                    file_type=f["type"],
-                    content_text=f["content"]
+                    name=file_item["name"],
+                    file_type=file_item["type"],
+                    content_text=file_item["content"],
+                    file_hash=content_hash
                 )
-                db.add(f_row)
+                db.add(new_file)
                 db.commit()
-                db.refresh(f_row)
-                f["id"] = f_row.id
-            else:
-                f_row.name = f["name"]
-                f_row.file_type = f["type"]
-                f_row.content_text = f["content"]
-                db.commit()
+                db.refresh(new_file)
 
-            current_file_ids.append(f_row.id)
-
-            current_img_labels = []
-            for img in f.get("images", []):
-                img_row = db.query(SourceImage).filter(
-                    SourceImage.file_id == f_row.id,
-                    SourceImage.label == img["label"]
-                ).first()
-                
-                if not img_row:
-                    local_path = save_uploaded_image_locally(username, img["bytes"], img["label"])
-                    img_row = SourceImage(
-                        file_id=f_row.id,
-                        label=img["label"],
-                        storage_path=local_path,
-                        mime_type=img["mime_type"]
+                for idx, img_item in enumerate(file_item.get("images", [])):
+                    storage_path = save_uploaded_image_locally(img_item["bytes"], content_hash, idx)
+                    new_img = SourceImage(
+                        source_file_id=new_file.id,
+                        label=img_item.get("label", f"Slide Image {idx}"),
+                        storage_path=storage_path,
+                        mime_type=img_item["mime_type"]
                     )
-                    db.add(img_row)
-                current_img_labels.append(img["label"])
-            
-            db.query(SourceImage).filter(
-                SourceImage.file_id == f_row.id,
-                ~SourceImage.label.in_(current_img_labels)
-            ).delete(synchronize_session=False)
-            db.commit()
+                    db.add(new_img)
+                db.commit()
 
-        db.query(SourceFile).filter(
-            SourceFile.workspace_id == ws_row.id,
-            ~SourceFile.id.in_(current_file_ids)
-        ).delete(synchronize_session=False)
-        db.commit()
-
-        if ws_memory.get("generated_notes"):
-            notes_md = ws_memory["generated_notes"]
-            notes_hash = hashlib.md5(notes_md.encode("utf-8")).hexdigest()
+        for guide in st.session_state.get("saved_guides", []):
+            if guide.get("subject") != subject_name:
+                continue
             existing_guide = db.query(StudyGuide).filter(
                 StudyGuide.workspace_id == ws_row.id,
-                StudyGuide.guide_hash == notes_hash
+                or_(
+                    StudyGuide.guide_hash == guide["id"],
+                    StudyGuide.content_md == guide["content"],
+                ),
             ).first()
-            
             if not existing_guide:
-                first_line = notes_md.split("\n")[0] if notes_md else ""
-                title = first_line.replace("#", "").strip() if first_line.startswith("#") else f"{subject_name} Study Guide"
-                new_guide = StudyGuide(
+                db.add(StudyGuide(
                     workspace_id=ws_row.id,
-                    title=title[:80],
-                    content_md=notes_md,
-                    guide_hash=notes_hash
-                )
-                db.add(new_guide)
-                db.commit()
-
-        db.query(QuizAttempt).filter(QuizAttempt.workspace_id == ws_row.id).delete()
-        for q in ws_memory.get("quiz_history", []):
-            attempt_row = QuizAttempt(
-                workspace_id=ws_row.id,
-                score=q["score"],
-                quiz_json=json.dumps(q["questions"]),
-                answers_json=json.dumps(q["answers"])
-            )
-            db.add(attempt_row)
+                    title=guide["title"],
+                    content_md=guide["content"],
+                    guide_hash=guide["id"],
+                ))
         db.commit()
 
+        stored_attempts_count = db.query(QuizAttempt).filter(
+            QuizAttempt.workspace_id == ws_row.id
+        ).count()
+        memory_history = ws_memory.get("quiz_history", [])
+        if len(memory_history) > stored_attempts_count:
+            for attempt in memory_history[stored_attempts_count:]:
+                new_attempt = QuizAttempt(
+                    workspace_id=ws_row.id,
+                    score=attempt["score"],
+                    quiz_json=json.dumps(attempt.get("questions", [])),
+                    answers_json=json.dumps(attempt.get("answers", {}))
+                )
+                db.add(new_attempt)
+            db.commit()
+
     except Exception:
-        logger.error("save_active_workspace_to_db crashed", exc_info=True)
+        db.rollback()
+        logger.error("save_active_workspace_to_db failed (user=%s, subject=%s)", username, subject_name, exc_info=True)
+        st.error("Something went wrong while saving your workspace. Please try again.")
     finally:
         db.close()
 
@@ -1068,7 +933,8 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
         st.markdown(
             f"""
             <div style="display:flex;align-items:center;gap:13px;
-                        padding:14px 4px 16px; border-bottom:1px solid var(--line);margin-bottom:6px;">
+                        padding:14px 4px 16px;
+                        border-bottom:1px solid var(--line);margin-bottom:6px;">
                 <div style="width:50px;height:50px;border-radius:50%;
                             background:var(--yellow);flex-shrink:0;
                             display:flex;align-items:center;justify-content:center;
@@ -1114,38 +980,90 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
         active = st.session_state.get("active_workspace", subjects[0])
         if active not in subjects:
             active = subjects[0]
-
         selected = active
+
         for ws_name in subjects:
             if ws_name == active:
                 st.markdown('<div class="ws-active-marker"></div>', unsafe_allow_html=True)
             if st.button(ws_name, key=f"ws_{ws_name}", use_container_width=True, type="secondary"):
+                st.session_state["active_workspace"] = ws_name
                 selected = ws_name
-
-        new_subject = st.text_input("New subject...", key="new_subject_input", label_visibility="collapsed")
-        if st.button("➕ Add Workspace", use_container_width=True):
-            cleaned = new_subject.strip()
-            if cleaned and cleaned not in st.session_state["workspaces"]:
-                st.session_state["workspaces"][cleaned] = blank_workspace()
-                selected = cleaned
-                st.session_state["is_dirty"] = True
                 st.rerun()
 
-        if len(st.session_state["workspaces"]) > 1:
-            if not st.session_state.get("_confirm_del_ws", False):
-                if st.button(f"🗑 Delete '{active}'", use_container_width=True, type="secondary"):
-                    st.session_state["_confirm_del_ws"] = True
+        if st.session_state.get("_rename_ws_open"):
+            new_name = st.text_input(
+                "Rename", value=active, key="_rename_ws_val",
+                label_visibility="collapsed",
+            )
+            c_save, c_cancel = st.columns(2)
+            with c_save:
+                if st.button("Save", key="_rename_save", use_container_width=True, type="primary"):
+                    new_name = new_name.strip()
+                    if new_name and new_name != active:
+                        ws_data = st.session_state["workspaces"].pop(active)
+                        st.session_state["workspaces"][new_name] = ws_data
+                        st.session_state["active_workspace"] = new_name
+                        selected = new_name
+                    st.session_state["_rename_ws_open"] = False
                     st.rerun()
+            with c_cancel:
+                if st.button("Cancel", key="_rename_cancel", use_container_width=True):
+                    st.session_state["_rename_ws_open"] = False
+                    st.rerun()
+
+        c_add, c_ren, c_del = st.columns([4, 1, 1])
+        with c_add:
+            if st.button("＋ Add Workspace", key="_add_ws_toggle", use_container_width=True):
+                st.session_state["_add_ws_open"] = (
+                    not st.session_state.get("_add_ws_open", False)
+                )
+                st.rerun()
+        with c_ren:
+            if st.button("✎", key="_ren_ws_btn", help="Rename active workspace"):
+                st.session_state["_rename_ws_open"] = (
+                    not st.session_state.get("_rename_ws_open", False)
+                )
+                st.rerun()
+        with c_del:
+            if st.button("🗑", key="_del_ws_btn", help="Delete active workspace"):
+                st.session_state["_confirm_del_ws"] = True
+                st.rerun()
+
+        if st.session_state.get("_add_ws_open"):
+            new_subject = st.text_input(
+                "", placeholder="e.g. CSE 240, Physics…",
+                key="_new_ws_name", label_visibility="collapsed",
+            )
+            if st.button("Create", key="_create_ws", type="primary", use_container_width=True):
+                s = new_subject.strip()
+                if s:
+                    st.session_state["workspaces"].setdefault(s, blank_workspace())
+                    st.session_state["active_workspace"] = s
+                    selected = s
+                    save_active_workspace_to_db(
+                        username, s, st.session_state["workspaces"][s]
+                    )
+                    st.session_state["_add_ws_open"] = False
+                    st.rerun()
+
+        if st.session_state.get("_confirm_del_ws"):
+            if len(subjects) == 1:
+                st.warning("Create another workspace first.")
+                st.session_state["_confirm_del_ws"] = False
             else:
-                st.warning(f"Delete '{active}' permanently?")
+                st.warning(f"Delete **{active}**? This cannot be undone.")
                 cy, cn = st.columns(2)
                 with cy:
                     if st.button("Yes", key="_del_ws_yes", type="primary", use_container_width=True):
                         ws_id = st.session_state["workspaces"][active].get("id")
                         if ws_id:
+                            # FIX: corrected argument order to match function signature
+                            # delete_workspace_from_db(username: str, workspace_id: str)
                             delete_workspace_from_db(username=username, workspace_id=ws_id)
                         del st.session_state["workspaces"][active]
-                        st.session_state["active_workspace"] = next(iter(st.session_state["workspaces"]))
+                        st.session_state["active_workspace"] = next(
+                            iter(st.session_state["workspaces"])
+                        )
                         st.session_state["_confirm_del_ws"] = False
                         st.rerun()
                 with cn:
@@ -1177,9 +1095,9 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
             if st.button("Log Out", key="_sb_logout_btn", use_container_width=True, type="secondary"):
                 logout_user()
 
-        st.session_state["active_workspace"] = selected
-        api_key = st.session_state.get("gemini_api_key", "")
-        return selected, api_key, study_mode
+    st.session_state["active_workspace"] = selected
+    api_key = st.session_state.get("gemini_api_key", "")
+    return selected, api_key, study_mode
 
 
 # ---------------------------------------------------------------------------
@@ -1197,42 +1115,68 @@ def render_settings_page(current_user: str) -> None:
 
     st.markdown(
         "<h1 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
-        "color:#242B18;'>🔧 Settings & Account Management</h1>",
+        "color:#242B18;margin-bottom:0.2rem;'>⚙ Settings</h1>",
         unsafe_allow_html=True,
     )
+    st.caption(f"Logged in as **{current_user}**")
+
+    workspaces   = st.session_state.get("workspaces", {})
+    saved_guides = st.session_state.get("saved_guides", [])
+    ws_count     = len(workspaces)
+    guide_count  = len(saved_guides)
+    quiz_count   = sum(len(ws.get("quiz_history", [])) for ws in workspaces.values())
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Workspaces",    ws_count)
+    c2.metric("Guides Saved",  guide_count)
+    c3.metric("Quizzes Taken", quiz_count)
+
+    st.divider()
 
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔑 Gemini API Key</h3>",
         unsafe_allow_html=True,
     )
-    current_key = st.session_state.get("gemini_api_key", "")
-    new_key = st.text_input(
-        "Enter your Google AI Studio API Key",
-        value=current_key,
+    st.markdown(
+        "AI Study Buddy uses Google's Gemini to generate your study guides. "
+        "Your key is **stored only on this device** in your browser — it is never sent to our servers. "
+        '<a href="https://aistudio.google.com/app/apikey" target="_blank" '
+        'style="color:var(--green-dark);">Get a free key here →</a>',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"Active model: `{GEMINI_MODEL}`")
+
+    api_key_val = st.session_state.get("gemini_api_key", "")
+    api_key_input = st.text_input(
+        "API Key",
+        value=api_key_val,
         type="password",
-        help="Your key is held safely in browser runtime state — never compiled or checked on centralized disks.",
+        placeholder="Paste your Gemini API key here…",
+        label_visibility="collapsed",
+        key="_settings_api_key_input",
     )
-    if new_key != current_key:
-        st.session_state["gemini_api_key"] = new_key.strip()
-        st.success("API key synchronized.")
+    if st.button("Save API Key", type="primary"):
+        st.session_state["gemini_api_key"] = api_key_input
+        safe_key = _json.dumps(api_key_input)
+        st.markdown(
+            f"<script>try{{localStorage.setItem('gemini_api_key',{safe_key});}}catch(e){{}}</script>",
+            unsafe_allow_html=True,
+        )
+        st.success("API key saved to this browser.")
+
+    st.divider()
 
     st.markdown(
-        f"<div style='margin-top:-0.5rem;margin-bottom:1.5rem;font-size:0.85rem;color:var(--muted);'>"
-        f"Active LLM Core Subsystem: <strong>{GEMINI_MODEL}</strong></div>",
+        "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔒 Change Password</h3>",
         unsafe_allow_html=True,
     )
-
-    st.markdown(
-        "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔒 Update Password</h3>",
-        unsafe_allow_html=True,
+    current_pw = st.text_input("Current Password", type="password", key="_cp_current")
+    new_pw     = st.text_input(
+        "New Password", type="password",
+        placeholder="Min 8 chars · 1 number · 1 special character",
+        key="_cp_new",
     )
-    with st.form("change_password_form"):
-        current_pw = st.text_input("Current Password", type="password")
-        new_pw = st.text_input("New Password", type="password")
-        confirm_pw = st.text_input("Confirm New Password", type="password")
-        submit_change = st.form_submit_button("Modify Password")
-
-    if submit_change:
+    confirm_pw = st.text_input("Confirm New Password", type="password", key="_cp_confirm")
+    if st.button("Update Password", use_container_width=True, type="primary", key="_cp_submit"):
         from utils.auth import _validate_password
         from utils.persistence import verify_password, hash_password
         if not current_pw or not new_pw or not confirm_pw:
@@ -1260,6 +1204,7 @@ def render_settings_page(current_user: str) -> None:
                     db2.close()
 
     st.divider()
+
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🚪 Log Out</h3>",
         unsafe_allow_html=True,
@@ -1269,12 +1214,13 @@ def render_settings_page(current_user: str) -> None:
         logout_user()
 
     st.divider()
+
     st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>⚠️ Danger Zone</h3>",
         unsafe_allow_html=True,
     )
     st.caption("These actions are permanent and cannot be undone.")
-    
+
     if not st.session_state.get("_confirm_delete_account"):
         if st.button("🗑 Delete My Account", use_container_width=True):
             st.session_state["_confirm_delete_account"] = True
@@ -1307,31 +1253,59 @@ def render_settings_page(current_user: str) -> None:
 # ---------------------------------------------------------------------------
 
 def render_guide_viewer(guide: dict) -> None:
-    if st.button("← Back to Saved"):
+    if st.button("← Back to workspace"):
         st.session_state["viewing_guide"] = None
         st.rerun()
-    render_guide(guide["content"], title=guide["title"])
 
-
-# ---------------------------------------------------------------------------
-# Admin Metrics Subsystem
-# ---------------------------------------------------------------------------
-
-def render_admin_dashboard() -> None:
-    import pandas as pd
-    from pathlib import Path
-    st.markdown(
-        "<h1 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
-        "color:#242B18;'>🛠 Admin Control Dashboard</h1>",
-        unsafe_allow_html=True,
+    st.title(guide["title"])
+    st.caption(f"Saved at {guide['saved_at']}")
+    st.download_button(
+        "⬇ Download (.md)",
+        data=guide["content"].encode("utf-8"),
+        file_name=f"{guide['title'].lower().replace(' ', '_').replace('—', '').replace(' ', '_')}.md",
+        mime="text/markdown",
+        type="primary",
     )
-    
-    metrics_tab, users_tab = st.tabs(["📊 Activity Logs", "👥 User Registrations"])
-    with metrics_tab:
-        _METRICS_DIR = Path("metrics")
-        def _report_path(u: str) -> Path:
-            return _METRICS_DIR / u / "activity_report.md"
+    st.divider()
+    render_guide(guide["content"])
 
+
+# ---------------------------------------------------------------------------
+# Admin Dashboard
+# ---------------------------------------------------------------------------
+
+def render_admin_dashboard(current_user: str) -> None:
+    from tabs.db_inspector import render_db_inspector_tab
+    from utils.metrics import _report_path, _METRICS_DIR
+    import pandas as pd
+
+    _db_check = SessionLocal()
+    try:
+        _user_row = _db_check.query(User).filter(User.username == current_user).first()
+        _confirmed_admin = bool(_user_row and _user_row.is_admin)
+    except Exception:
+        logger.error("Admin gate DB check failed for '%s'", current_user, exc_info=True)
+        _confirmed_admin = False
+    finally:
+        _db_check.close()
+
+    if not _confirmed_admin:
+        st.error("Access denied.")
+        logger.warning("Admin dashboard access attempt by non-admin user '%s'", current_user)
+        return
+
+    st.title("🛠 Admin Dashboard")
+    st.caption(f"Logged in as **{current_user}**")
+
+    admin_tab, metrics_tab, users_tab = st.tabs([
+        "🕵️ Database Inspector", "📊 User Metrics", "👥 Users"
+    ])
+
+    with admin_tab:
+        render_db_inspector_tab()
+
+    with metrics_tab:
+        st.subheader("Per-User Metrics")
         if _METRICS_DIR.exists():
             user_dirs = [d for d in _METRICS_DIR.iterdir() if d.is_dir()]
             if not user_dirs:
@@ -1395,89 +1369,86 @@ def render_saved_guides_page() -> None:
     saved = st.session_state.get("saved_guides", [])
     if not saved:
         st.markdown(
-            "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;"
-            "border-radius:14px;padding:2rem;text-align:center;color:#5C6A48;font-size:1.1rem;'>"
-            "No notes saved yet. Generate notes inside a workspace and they'll compile here!"
-            "</div>",
+            "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;border-radius:18px;"
+            "padding:2rem;text-align:center;margin-top:1rem;'>"
+            "<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;font-size:1rem;'>"
+            "No guides saved yet — generate a study guide to see it here.</p></div>",
             unsafe_allow_html=True,
         )
         return
 
-    for item in saved:
-        with st.container():
-            st.markdown(
-                f"""
-                <div style="background:#FFFFFF; border:1.5px solid var(--line);
-                            border-radius:14px; padding:1.25rem 1.5rem; margin-bottom:0.75rem;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem;">
-                        <div>
-                            <span style="background:var(--sidebar); color:var(--ink);
-                                         padding:3px 10px; border-radius:999px; font-size:0.75rem;
-                                         font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">
-                                {item['subject']}
-                            </span>
-                            <h3 style="margin:0.5rem 0 0.2rem 0; font-family:'Truculenta',sans-serif; font-weight:800; color:var(--ink);">
-                                {item['title']}
-                            </h3>
-                            <div style="font-size:0.78rem; color:var(--muted);">
-                                Saved on {item['saved_at']}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            _, col_btn = st.columns([5, 1])
-            with col_btn:
-                if st.button("📖 View Guide", key=f"view_sg_{item['id']}", use_container_width=True):
-                    st.session_state["viewing_guide"] = item["id"]
-                    st.rerun()
+    for guide in saved:
+        guide_id = guide["id"]
+        col_pill, col_del = st.columns([9, 1])
+        with col_pill:
+            label = f"📄  {guide['title']}  ·  {guide['saved_at']}"
+            if st.button(label, key=f"sg_open_{guide_id}", use_container_width=True, type="primary"):
+                st.session_state["viewing_guide"] = guide_id
+                st.rerun()
+        with col_del:
+            if st.button("✕", key=f"sg_del_{guide_id}", help="Remove guide"):
+                if st.session_state.get("viewing_guide") == guide_id:
+                    st.session_state["viewing_guide"] = None
+                st.session_state["saved_guides"] = [
+                    g for g in saved if g["id"] != guide_id
+                ]
+                st.rerun()
 
 
 # ---------------------------------------------------------------------------
-# Core Runtime Entry Point
+# Main Execution Entrypoint
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     st.set_page_config(
         page_title=APP_TITLE,
-        page_icon="🎓",
+        page_icon=":books:",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
     )
-    apply_theme()
     init_auth_session_state()
+    apply_theme()
 
-    current_user = st.session_state.get("username")
+    if not st.session_state["authenticated"]:
+        render_login_signup_ui()
+        st.stop()
+
+    current_user = st.session_state["username"]
     is_admin = st.session_state.get("is_admin", False)
 
-    if not current_user:
-        render_login_signup_ui()
-        return
+    st.session_state.setdefault("current_page", "Dashboard")
+    st.session_state.setdefault("saved_guides", [])
+    st.session_state.setdefault("viewing_guide", None)
+    st.session_state.setdefault("admin_view", False)
+    st.session_state.setdefault("viewing_profile", False)
+    st.session_state.setdefault("is_dirty", False)
+    st.session_state.setdefault("gemini_api_key", "")
+    st.session_state.setdefault("_api_key_banner_dismissed", False)
 
-    if "workspaces" not in st.session_state:
-        ws_dict, saved_gs = load_user_workspaces_from_db(current_user)
-        if not ws_dict:
-            ws_dict["General Study"] = blank_workspace()
-        st.session_state["workspaces"] = ws_dict
-        st.session_state["saved_guides"] = saved_gs
-        st.session_state["is_dirty"] = False
+    if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
+        loaded, loaded_guides = load_user_workspaces_from_db(current_user)
+        if loaded:
+            st.session_state["workspaces"] = loaded
+            st.session_state["active_workspace"] = next(iter(loaded))
+            st.session_state["saved_guides"] = loaded_guides
+        else:
+            st.session_state["workspaces"] = {"My First Workspace": blank_workspace()}
+            st.session_state["active_workspace"] = "My First Workspace"
+            save_active_workspace_to_db(current_user, "My First Workspace",
+                                        st.session_state["workspaces"]["My First Workspace"])
 
-    if is_admin and st.session_state.get("admin_view", False):
-        render_workspace_sidebar(current_user, is_admin=True)
-        render_admin_dashboard()
-        return
+    subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin)
 
-    subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin=is_admin)
-
-    if st.session_state.get("current_page") == "Settings":
+    if st.session_state.get("current_page") == "Settings" or st.session_state.get("viewing_profile"):
         render_settings_page(current_user)
         return
 
+    if is_admin and st.session_state.get("admin_view"):
+        render_admin_dashboard(current_user)
+        return
+
     viewing_id = st.session_state.get("viewing_guide")
-    if viewing_id:
+    if viewing_id is not None:
         saved = st.session_state.get("saved_guides", [])
         guide_to_view = next((g for g in saved if g["id"] == viewing_id), None)
         if guide_to_view:
@@ -1497,24 +1468,48 @@ def main() -> None:
     elif current_page == "Dashboard":
         st.markdown(
             "<h1 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
-            "color:#242B18;margin-bottom:0.1rem;'>SunDevil AI</h1>"
-            f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;font-size:1.15rem;margin-bottom:1.5rem;'>"
-            f"Active Workspace: <strong>{subject}</strong> — Upload materials to configure study tabs.</p>",
+            "color:#242B18;margin-bottom:0.1rem;'>AI Study Buddy</h1>"
+            f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
+            f"font-size:0.95rem;margin-top:0;'>{subject}</p>",
             unsafe_allow_html=True,
         )
-        render_ingest_tab(workspace)
+        st.divider()
+        render_ingest_tab(subject, workspace, api_key)
     else:
-        if not api_key:
+        page_meta = {
+            "Study guide": (
+                "<i class='ti ti-book' style='color:#D9A441;margin-right:8px;'></i>Study Guide",
+                subject,
+            ),
+            "Quiz": (
+                "<i class='ti ti-help-circle' style='color:#D9A441;margin-right:8px;'></i>Interactive Quiz",
+                subject,
+            ),
+        }
+        title_html, caption = page_meta.get(
+            current_page,
+            ("<i class='ti ti-layout-dashboard' style='color:#D9A441;margin-right:8px;'></i>Dashboard", subject),
+        )
+        st.markdown(
+            f"<h2 style='font-family:\"Truculenta\",sans-serif;font-weight:900;"
+            f"color:#242B18;margin-bottom:0.1rem;'>{title_html}</h2>"
+            f"<p style='color:#5C6A48;font-family:\"Truculenta\",sans-serif;"
+            f"font-size:0.95rem;margin-top:0;'>{caption}</p>",
+            unsafe_allow_html=True,
+        )
+
+        if (not st.session_state.get("gemini_api_key")
+                and not st.session_state.get("_api_key_banner_dismissed")):
             st.markdown(
                 """
-                <div style="background:#FFF9E6;border:1.5px solid #E6A100;border-radius:14px;
-                            padding:1.25rem 1.5rem;margin:1rem 0 1.5rem 0;">
-                  <strong style="color:#805900;font-size:1.1rem;font-family:'Truculenta',sans-serif;">
+                <div style="border:2px solid #D9A441;border-radius:14px;
+                            padding:1rem 1.25rem;background:#FFFBEF;margin-bottom:1rem;">
+                  <strong style="color:#242B18;font-family:'Truculenta',sans-serif;">
                     🔑 Gemini API Key required
                   </strong>
                   <p style="color:#5C6A48;font-family:'Truculenta',sans-serif;
                             font-size:0.9rem;margin:0.4rem 0 0;">
-                    SunDevil AI uses Google's Gemini to generate study guides and quizzes.
+                    AI Study Buddy uses Google's Gemini to generate study guides and quizzes.
                     Your key is <strong>stored only in this browser</strong> — never on our servers.
                     <a href="https://aistudio.google.com/app/apikey" target="_blank"
                        style="color:#8BA552;">Get a free key →</a>
