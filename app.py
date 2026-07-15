@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-# Configuration & Subsystem Imports
 from utils.auth import init_auth_session_state, render_login_signup_ui, logout_user
 from utils.persistence import (
     SessionLocal, User, Workspace, SourceFile, SourceImage, StudyGuide, QuizAttempt,
@@ -20,34 +19,27 @@ from utils.guide import render_guide
 APP_TITLE = "AI Study Buddy"
 
 
-# ---------------------------------------------------------------------------
-# Theme — only static, hardcoded CSS uses unsafe_allow_html
-# ---------------------------------------------------------------------------
-
 def apply_theme() -> None:
     st.markdown(
         """
         <style>
-        /* ── Icon fonts ── */
         @import url('https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css');
         @import url('https://fonts.googleapis.com/css2?family=Truculenta:opsz,wght@12..72,100..900&display=swap');
 
-        /* ── Design tokens ── */
         :root {
-            --bg:          #F5F8EE;   /* warm green-tinted page canvas  */
-            --sidebar:     #ECF1E2;   /* slightly deeper green for sidebar */
+            --bg:          #F5F8EE;
+            --sidebar:     #ECF1E2;
             --panel:       #FFFFFF;
-            --ink:         #242B18;   /* very dark green-black for max contrast */
+            --ink:         #242B18;
             --muted:       #5C6A48;
-            --line:        #C5D99A;   /* soft green rule / border */
-            --green:       #ABC270;   /* primary accent — bounding, badges, active states */
-            --green-dark:  #8BA552;   /* hover for green elements */
-            --yellow:      #D9A441;   /* primary CTA buttons, active nav */
-            --orange:      #C18A2A;   /* hover state for yellow elements */
+            --line:        #C5D99A;
+            --green:       #ABC270;
+            --green-dark:  #8BA552;
+            --yellow:      #D9A441;
+            --orange:      #C18A2A;
             --green-glow:  rgba(171, 194, 112, 0.22);
         }
 
-        /* ── Typography — Truculenta across all text-bearing elements ── */
         html, body, .stApp,
         h1, h2, h3, h4, h5, h6,
         p, label, span, button, input, textarea, select,
@@ -59,39 +51,31 @@ def apply_theme() -> None:
             font-family: 'Truculenta', sans-serif !important;
         }
 
-        /* ── Strip Streamlit chrome ── */
         header[data-testid="stHeader"] {
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
         }
-        /* DO NOT hide stToolbar — stExpandSidebarButton lives inside it.
-           Hiding the toolbar hides the expand button, making the sidebar
-           permanently unrecoverable once collapsed. */
         [data-testid="stToolbar"] {
             background: transparent !important;
             box-shadow: none !important;
         }
-        /* Hide only the specific sub-elements we don't want */
         [data-testid="stDecoration"],
         [data-testid="stStatusWidget"],
         [data-testid="stToolbarActionButtonTooltip"],
         #MainMenu,
         footer { display: none !important; }
 
-        /* ── Page canvas — force pastel even when OS is in dark mode ── */
         html, body { background: var(--bg) !important; color: var(--ink) !important; }
         .stApp    { background: var(--bg) !important; color: var(--ink) !important; }
         .main .block-container { max-width: 1360px; padding-top: 1rem; }
 
-        /* ── Sidebar ── */
         [data-testid="stSidebar"] {
             background: var(--sidebar) !important;
             border-right: 2px solid var(--line) !important;
         }
         [data-testid="stSidebar"] * { color: var(--ink) !important; letter-spacing: 0; }
 
-        /* Sidebar secondary buttons — transparent nav items (inactive) */
         [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
         [data-testid="stSidebar"] [data-testid="baseButton-secondary"] {
             background:       transparent !important;
@@ -108,7 +92,6 @@ def apply_theme() -> None:
         [data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover {
             background: rgba(217,164,65,0.15) !important;
         }
-        /* Sidebar primary buttons — active nav (dark gold + white text) */
         [data-testid="stSidebar"] [data-testid="stBaseButton-primary"],
         [data-testid="stSidebar"] [data-testid="baseButton-primary"] {
             background:       var(--yellow) !important;
@@ -124,13 +107,11 @@ def apply_theme() -> None:
         [data-testid="stSidebar"] [data-testid="baseButton-primary"]:hover {
             background: var(--orange) !important;
         }
-        /* Primary text: white; secondary text: ink */
         [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] p,
         [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] span { color: #FFFFFF !important; }
         [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] p,
         [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
 
-        /* Active workspace: subtle green tint via marker sibling */
         [data-testid="stSidebar"] div:has(.ws-active-marker) + div [data-testid="stBaseButton-secondary"],
         [data-testid="stSidebar"] div:has(.ws-active-marker) + div [data-testid="baseButton-secondary"] {
             background:  rgba(171,194,112,0.28) !important;
@@ -138,7 +119,6 @@ def apply_theme() -> None:
             font-weight: 600 !important;
         }
 
-        /* Study mode segmented toggle: joined pills */
         [data-testid="stSidebar"] button.mode-btn-left {
             border-radius: 999px 0 0 999px !important;
             border-right:  none !important;
@@ -169,7 +149,6 @@ def apply_theme() -> None:
             color:      var(--muted) !important;
         }
 
-        /* Sidebar footer text-link buttons */
         [data-testid="stSidebar"] button.sb-footer-link {
             background:      transparent !important;
             border:          none !important;
@@ -192,14 +171,12 @@ def apply_theme() -> None:
         [data-testid="stSidebar"] button.sb-footer-link:hover p,
         [data-testid="stSidebar"] button.sb-footer-link:hover span { color: var(--ink) !important; }
 
-        /* ── Headings ── */
         h1, h2, h3, h4, h5, h6 {
             color: var(--ink) !important;
             font-family: 'Truculenta', sans-serif !important;
             letter-spacing: -0.3px;
         }
 
-        /* ── Main workspace tabs — green active, clean inactive ── */
         div[data-testid="stTabs"] button[role="tab"] {
             border-radius: 999px;
             padding: 10px 20px;
@@ -219,7 +196,6 @@ def apply_theme() -> None:
             background: #DFE9C8 !important;
         }
 
-        /* ── All non-sidebar buttons — secondary (white) ── */
         .stButton > button,
         .stDownloadButton > button {
             border-radius: 999px;
@@ -241,7 +217,6 @@ def apply_theme() -> None:
             border-color: var(--green) !important;
         }
 
-        /* Primary buttons — yellow fill, orange hover */
         .stButton > button[kind="primary"],
         .stDownloadButton > button {
             background: var(--yellow) !important;
@@ -261,7 +236,6 @@ def apply_theme() -> None:
             border-color: var(--orange) !important;
         }
 
-        /* testid overrides that survive Streamlit's dark-theme injection */
         [data-testid="baseButton-primary"],
         [data-testid="stBaseButton-primary"] {
             background: var(--yellow) !important;
@@ -274,7 +248,6 @@ def apply_theme() -> None:
         [data-testid="stBaseButton-primary"] p,
         [data-testid="stBaseButton-primary"] span { color: var(--ink) !important; }
 
-        /* Tabler icon alignment inside nav buttons */
         [data-testid="stSidebar"] button .ti {
             font-size: 1rem;
             margin-right: 7px;
@@ -292,7 +265,6 @@ def apply_theme() -> None:
         [data-testid="stBaseButton-secondary"] p,
         [data-testid="stBaseButton-secondary"] span { color: var(--ink) !important; }
 
-        /* ── File uploader ── */
         [data-testid="stFileUploader"] {
             background: #FFFFFF !important;
             border: 2.5px dashed var(--green) !important;
@@ -312,7 +284,6 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        /* Browse / Upload button */
         [data-testid="stFileUploaderDropzone"] button {
             position:      relative !important;
             background:    var(--yellow) !important;
@@ -349,7 +320,6 @@ def apply_theme() -> None:
             pointer-events: none !important;
         }
 
-        /* ── Input fields — green focus ring ── */
         div[data-baseweb="input"] input,
         div[data-baseweb="textarea"] textarea,
         [data-testid="stTextInput"] input,
@@ -381,7 +351,6 @@ def apply_theme() -> None:
             opacity: 1 !important;
         }
 
-        /* ── Cards: metrics, expanders, text areas ── */
         div[data-testid="stMetric"] {
             background: #FFFFFF;
             border: 1.5px solid var(--line);
@@ -410,23 +379,18 @@ def apply_theme() -> None:
             color: var(--ink);
         }
 
-        /* ── Login form card ── */
         [data-testid="stForm"] {
             background: #FFFFFF;
             border: 1.5px solid var(--line);
             border-radius: 18px;
             padding: 1.5rem 1.5rem 0.5rem;
         }
-
-        /* ── Form labels — force dark so they're visible on white form bg ── */
         [data-testid="stForm"] label,
         [data-testid="stForm"] [data-testid="stWidgetLabel"],
         [data-testid="stForm"] [data-testid="stWidgetLabel"] p,
         [data-testid="stForm"] [data-testid="stWidgetLabel"] label {
             color: var(--ink) !important;
         }
-
-        /* ── Form submit buttons — green fill, white text ── */
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"],
         [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] {
             background: var(--green) !important;
@@ -447,7 +411,6 @@ def apply_theme() -> None:
             border-color: var(--green-dark) !important;
         }
 
-        /* ── Metric cards — force dark text (profile/settings page) ── */
         [data-testid="stMetricLabel"],
         [data-testid="stMetricLabel"] label,
         [data-testid="stMetricLabel"] p,
@@ -455,7 +418,6 @@ def apply_theme() -> None:
         [data-testid="stMetricValue"] div,
         [data-testid="stMetricDelta"] { color: var(--ink) !important; }
 
-        /* ── Alert components — force high-contrast text regardless of bg colour ── */
         div[data-testid="stAlert"] {
             border-radius: 14px !important;
             font-family: 'Truculenta', sans-serif !important;
@@ -469,14 +431,12 @@ def apply_theme() -> None:
             color: var(--ink) !important;
         }
 
-        /* ── Progress bar — green fill ── */
         div[role="progressbar"] > div,
         .stProgress > div > div > div > div {
             background-color: var(--green) !important;
             border-radius: 999px;
         }
 
-        /* ── Selectbox / dropdown ── */
         [data-testid="stSelectbox"] [data-baseweb="select"] > div {
             background: #FFFFFF !important;
             border-color: var(--line) !important;
@@ -488,7 +448,6 @@ def apply_theme() -> None:
             box-shadow: 0 0 0 3px var(--green-glow) !important;
         }
 
-        /* ── Radio buttons — green accent ── */
         [data-baseweb="radio"] > div:first-child {
             border-color: var(--green) !important;
         }
@@ -497,7 +456,6 @@ def apply_theme() -> None:
             border-color: var(--green) !important;
         }
 
-        /* ── Checkboxes — green accent ── */
         [data-baseweb="checkbox"] [role="checkbox"] {
             border-color: var(--green) !important;
         }
@@ -506,7 +464,6 @@ def apply_theme() -> None:
             border-color: var(--green) !important;
         }
 
-        /* ── Sidebar section label helper ── */
         .sb-section-label {
             font-size: 0.68rem;
             font-weight: 700;
@@ -518,7 +475,6 @@ def apply_theme() -> None:
             padding-left: 2px;
         }
 
-        /* ── Dataframe table ── */
         [data-testid="stDataFrame"] {
             border: 1.5px solid var(--line) !important;
             border-radius: 14px !important;
@@ -531,10 +487,8 @@ def apply_theme() -> None:
             font-weight: 700;
         }
 
-        /* ── Divider ── */
         hr { border-color: var(--line) !important; opacity: 1; }
 
-        /* ── pre / code ── */
         pre, pre * { color: var(--ink) !important; background: transparent !important; }
         code:not([class]) {
             background: #E3EED0 !important;
@@ -544,12 +498,10 @@ def apply_theme() -> None:
             font-family: 'Truculenta', monospace !important;
         }
 
-        /* ── Spinner ── */
         [data-testid="stSpinner"] > div {
             border-top-color: var(--green) !important;
         }
 
-        /* ── Sidebar collapse button ── */
         [data-testid="stSidebarCollapseButton"] button {
             position:      relative !important;
             width:         42px !important;
@@ -585,7 +537,6 @@ def apply_theme() -> None:
             pointer-events: none !important;
         }
 
-        /* ── Sidebar expand button ── */
         [data-testid="stExpandSidebarButton"] button {
             position:      relative !important;
             width:         42px !important;
@@ -626,7 +577,6 @@ def apply_theme() -> None:
             min-width: 0 !important;
         }
 
-        /* ── Study guide expanders ── */
         details > summary { list-style: none !important; }
         details > summary::-webkit-details-marker { display: none !important; }
 
@@ -750,10 +700,6 @@ def apply_theme() -> None:
         unsafe_allow_html=True,
     )
 
-
-# ---------------------------------------------------------------------------
-# DATA SYNCING: Read/Write Streamlit Workspaces dynamically to SQLite
-# ---------------------------------------------------------------------------
 
 def load_user_workspaces_from_db(username: str) -> tuple[dict, list]:
     db: Session = SessionLocal()
@@ -912,20 +858,12 @@ def save_active_workspace_to_db(username: str, subject_name: str, ws_memory: dic
         db.close()
 
 
-# ---------------------------------------------------------------------------
-# Sidebar helper
-# ---------------------------------------------------------------------------
-
 def _sb_section(label: str) -> None:
     st.markdown(
         f'<div class="sb-section-label">{label}</div>',
         unsafe_allow_html=True,
     )
 
-
-# ---------------------------------------------------------------------------
-# Sidebar View Block (Authentication-Aware)
-# ---------------------------------------------------------------------------
 
 def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str, str, str]:
     with st.sidebar:
@@ -1057,8 +995,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                     if st.button("Yes", key="_del_ws_yes", type="primary", use_container_width=True):
                         ws_id = st.session_state["workspaces"][active].get("id")
                         if ws_id:
-                            # FIX: corrected argument order to match function signature
-                            # delete_workspace_from_db(username: str, workspace_id: str)
                             delete_workspace_from_db(username=username, workspace_id=ws_id)
                         del st.session_state["workspaces"][active]
                         st.session_state["active_workspace"] = next(
@@ -1099,10 +1035,6 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
     api_key = st.session_state.get("gemini_api_key", "")
     return selected, api_key, study_mode
 
-
-# ---------------------------------------------------------------------------
-# Settings page
-# ---------------------------------------------------------------------------
 
 def render_settings_page(current_user: str) -> None:
     import json as _json
@@ -1199,7 +1131,7 @@ def render_settings_page(current_user: str) -> None:
                         st.success("Password updated successfully.")
                 except Exception:
                     logger.error("change_password failed for '%s'", current_user, exc_info=True)
-                    st.error("Something went wrong while updating your password. Please try again.")
+                    st.error("Something went wrong. Please try again.")
                 finally:
                     db2.close()
 
@@ -1248,10 +1180,6 @@ def render_settings_page(current_user: str) -> None:
                 st.rerun()
 
 
-# ---------------------------------------------------------------------------
-# Guide viewer page
-# ---------------------------------------------------------------------------
-
 def render_guide_viewer(guide: dict) -> None:
     if st.button("← Back to workspace"):
         st.session_state["viewing_guide"] = None
@@ -1271,14 +1199,16 @@ def render_guide_viewer(guide: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Admin Dashboard
+# Admin Dashboard — FIX: no longer creates its own tabs.
+# render_db_inspector_tab() owns all 4 tabs internally.
+# The old version created 3 tabs here then called render_db_inspector_tab()
+# inside one of them, which created 4 more tabs — causing the double tab bug.
 # ---------------------------------------------------------------------------
 
 def render_admin_dashboard(current_user: str) -> None:
     from tabs.db_inspector import render_db_inspector_tab
-    from utils.metrics import _report_path, _METRICS_DIR
-    import pandas as pd
 
+    # Verify admin in DB — don't trust session state alone
     _db_check = SessionLocal()
     try:
         _user_row = _db_check.query(User).filter(User.username == current_user).first()
@@ -1291,72 +1221,16 @@ def render_admin_dashboard(current_user: str) -> None:
 
     if not _confirmed_admin:
         st.error("Access denied.")
-        logger.warning("Admin dashboard access attempt by non-admin user '%s'", current_user)
+        logger.warning("Admin dashboard access attempt by non-admin '%s'", current_user)
         return
 
     st.title("🛠 Admin Dashboard")
     st.caption(f"Logged in as **{current_user}**")
 
-    admin_tab, metrics_tab, users_tab = st.tabs([
-        "🕵️ Database Inspector", "📊 User Metrics", "👥 Users"
-    ])
+    # render_db_inspector_tab handles its own tabs: Database Inspector,
+    # Product Metrics, Per-User Activity, Users
+    render_db_inspector_tab()
 
-    with admin_tab:
-        render_db_inspector_tab()
-
-    with metrics_tab:
-        st.subheader("Per-User Metrics")
-        if _METRICS_DIR.exists():
-            user_dirs = [d for d in _METRICS_DIR.iterdir() if d.is_dir()]
-            if not user_dirs:
-                st.info("No metrics recorded yet.")
-            else:
-                for user_dir in sorted(user_dirs):
-                    uname = user_dir.name
-                    report = _report_path(uname)
-                    with st.expander(f"📁 {uname}", expanded=False):
-                        if report.exists() and report.stat().st_size > 0:
-                            col1, col2 = st.columns([3, 1])
-                            with col1:
-                                st.caption(f"{report.stat().st_size // 1024 + 1} KB")
-                            with col2:
-                                u_key = f"dl_metrics_{uname}"
-                                st.download_button(
-                                    "⬇ Download",
-                                    data=report.read_bytes(),
-                                    file_name=f"{uname}_metrics.md",
-                                    mime="text/markdown",
-                                    key=u_key,
-                                )
-                            preview = report.read_text(encoding="utf-8")
-                            st.markdown(preview[:4000] + ("\n\n_— download for full report —_" if len(preview) > 4000 else ""))
-                        else:
-                            st.caption("No activity yet.")
-        else:
-            st.info("No metrics directory found.")
-
-    with users_tab:
-        db = SessionLocal()
-        try:
-            users = db.query(User).all()
-            if users:
-                st.dataframe(
-                    pd.DataFrame([{
-                        "Username": u.username,
-                        "Workspaces": len(u.workspaces),
-                        "Registered": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "—",
-                    } for u in users]),
-                    use_container_width=True,
-                )
-            else:
-                st.info("No users yet.")
-        finally:
-            db.close()
-
-
-# ---------------------------------------------------------------------------
-# Saved Guides page
-# ---------------------------------------------------------------------------
 
 def render_saved_guides_page() -> None:
     st.markdown(
@@ -1395,10 +1269,6 @@ def render_saved_guides_page() -> None:
                 st.rerun()
 
 
-# ---------------------------------------------------------------------------
-# Main Execution Entrypoint
-# ---------------------------------------------------------------------------
-
 def main() -> None:
     st.set_page_config(
         page_title=APP_TITLE,
@@ -1432,10 +1302,11 @@ def main() -> None:
             st.session_state["active_workspace"] = next(iter(loaded))
             st.session_state["saved_guides"] = loaded_guides
         else:
-            st.session_state["workspaces"] = {"My First Workspace": blank_workspace()}
-            st.session_state["active_workspace"] = "My First Workspace"
-            save_active_workspace_to_db(current_user, "My First Workspace",
-                                        st.session_state["workspaces"]["My First Workspace"])
+            default_ws_name = "My Workspace"
+            st.session_state["workspaces"] = {default_ws_name: blank_workspace()}
+            st.session_state["active_workspace"] = default_ws_name
+            save_active_workspace_to_db(current_user, default_ws_name,
+                                        st.session_state["workspaces"][default_ws_name])
 
     subject, api_key, study_mode = render_workspace_sidebar(current_user, is_admin)
 
