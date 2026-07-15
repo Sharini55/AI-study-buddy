@@ -563,20 +563,26 @@ def apply_theme() -> None:
             cursor:        pointer !important;
             overflow:      hidden !important;
         }
-        [data-testid="stSidebarCollapseButton"] button svg {
-            display:       none !important;
+        [data-testid="stSidebarCollapseButton"] button svg,
+        [data-testid="stSidebarCollapseButton"] button span,
+        [data-testid="stSidebarCollapseButton"] button p,
+        [data-testid="stSidebarCollapseButton"] button div {
+            color:      transparent !important;
+            fill:       transparent !important;
+            opacity:    0 !important;
+            user-select: none !important;
         }
         [data-testid="stSidebarCollapseButton"] button::after {
-            content:       "«" !important;
-            position:      absolute !important;
-            inset:         0 !important;
-            display:       flex !important;
-            align-items:   center !important;
+            content:    "«";
+            position:   absolute !important;
+            inset:      0 !important;
+            display:    flex !important;
+            align-items:     center !important;
             justify-content: center !important;
-            font-size:     1.7rem !important;
-            font-weight:   700 !important;
-            color:         var(--ink) !important;
-            font-family:   'Truculenta', sans-serif !important;
+            font-size:  1.35rem !important;
+            font-weight: 700 !important;
+            color:      var(--ink) !important;
+            pointer-events: none !important;
         }
 
         /* ── Sidebar expand button ── */
@@ -595,11 +601,25 @@ def apply_theme() -> None:
             overflow:      hidden !important;
         }
         [data-testid="stExpandSidebarButton"] button svg,
-        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
-            display:       inline-block !important;
-            color:         #000000 !important;
-            fill:          #000000 !important;
-            opacity:       1 !important;
+        [data-testid="stExpandSidebarButton"] button span,
+        [data-testid="stExpandSidebarButton"] button p,
+        [data-testid="stExpandSidebarButton"] button div {
+            color:      transparent !important;
+            fill:       transparent !important;
+            opacity:    0 !important;
+            user-select: none !important;
+        }
+        [data-testid="stExpandSidebarButton"] button::after {
+            content:    "»";
+            position:   absolute !important;
+            inset:      0 !important;
+            display:    flex !important;
+            align-items:     center !important;
+            justify-content: center !important;
+            font-size:  1.35rem !important;
+            font-weight: 700 !important;
+            color:      var(--ink) !important;
+            pointer-events: none !important;
         }
 
         section[data-testid="stSidebar"] {
@@ -1038,6 +1058,7 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
                         ws_id = st.session_state["workspaces"][active].get("id")
                         if ws_id:
                             # FIX: corrected argument order to match function signature
+                            # delete_workspace_from_db(username: str, workspace_id: str)
                             delete_workspace_from_db(username=username, workspace_id=ws_id)
                         del st.session_state["workspaces"][active]
                         st.session_state["active_workspace"] = next(
