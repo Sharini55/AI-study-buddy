@@ -128,6 +128,8 @@ def generate_study_guide_sot(
     completed = [0]
     completed_lock = threading.Lock()
     sections: dict[int, str] = {}
+    failed_topics: list[str] = []
+    failed_lock = threading.Lock()
 
     def _write_section(idx: int, topic: str) -> tuple[int, str, int, int]:
         prompt_text = _safe_str(section_prompt(topic, subject, workspace, mode))
@@ -135,6 +137,13 @@ def generate_study_guide_sot(
             text = _gemini_generate(client, [prompt_text])
             return idx, text, _count_tokens(prompt_text), _count_tokens(text)
         except Exception as exc:
+            log_metric("generation_failed", {
+                "subject": subject,
+                "topic": topic,
+                "error_message": str(exc)[:300],
+            }, username=username)
+            with failed_lock:
+                failed_topics.append(topic)
             fallback = f"## {topic}\n\n_This section could not be generated ({exc})._\n"
             return idx, fallback, _count_tokens(prompt_text), 0
 
@@ -166,6 +175,7 @@ def generate_study_guide_sot(
         "input_tokens": total_input_tokens,
         "output_tokens": total_output_tokens,
         "cost_usd": cost,
+        "failed_sections": len(failed_topics),
     }, username=username)
 
     report_generation_metrics(
@@ -177,6 +187,12 @@ def generate_study_guide_sot(
         elapsed_s=elapsed,
         username=username,
     )
+
+    # Surface partial failures to the UI layer. The caller (app.py / tabs/study.py)
+    # should check st.session_state["last_guide_failed_sections"] after calling this
+    # function and render a warning banner if it's non-empty.
+    st.session_state["last_guide_failed_sections"] = failed_topics
+    st.session_state["last_guide_total_sections"] = len(topics)
 
     return assembled
 
@@ -230,6 +246,8 @@ def generate_remediation_pooled(
     batch_results: dict[int, str] = {}
     collected_prompts: list[str] = []
     collect_lock = threading.Lock()
+    failed_batches: list[list[str]] = []
+    failed_lock = threading.Lock()
 
     def _call_batch(batch_idx: int, topics_batch: list[str]) -> tuple[int, str, str, int, int]:
         prompt_text = _safe_str(
@@ -241,6 +259,13 @@ def generate_remediation_pooled(
             text = _gemini_generate(client, [prompt_text])
             return batch_idx, text, prompt_text, _count_tokens(prompt_text), _count_tokens(text)
         except Exception as exc:
+            log_metric("generation_failed", {
+                "subject": subject,
+                "topics": topics_batch,
+                "error_message": str(exc)[:300],
+            }, username=username)
+            with failed_lock:
+                failed_batches.append(topics_batch)
             fallback = "\n\n".join(
                 f"## {t}\n\n_Section could not be generated ({exc})._" for t in topics_batch
             )
@@ -277,6 +302,7 @@ def generate_remediation_pooled(
         "input_tokens": total_input_tokens,
         "output_tokens": total_output_tokens,
         "cost_usd": cost,
+        "failed_batches": len(failed_batches),
     }, username=username)
 
     combined_prompt = "\n\n--- BATCH SEPARATOR ---\n\n".join(collected_prompts)
@@ -289,6 +315,10 @@ def generate_remediation_pooled(
         elapsed_s=elapsed,
         username=username,
     )
+
+    # Surface partial failures to the UI layer, same pattern as generate_study_guide_sot.
+    st.session_state["last_remediation_failed_batches"] = failed_batches
+    st.session_state["last_remediation_total_batches"] = len(batches)
 
     return assembled
 
@@ -316,8 +346,19 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
             workspace.setdefault("visual_warnings", []).append(
                 "Visual analysis failed for this slide, but text was processed successfully."
             )
-            output = _gemini_generate(client, [prompt])
+            try:
+                output = _gemini_generate(client, [prompt])
+            except Exception as exc2:
+                log_metric("generation_failed", {
+                    "metric_label": metric_label,
+                    "error_message": str(exc2)[:300],
+                }, username=username)
+                raise RuntimeError(f"Gemini request failed: {exc2}") from exc2
         else:
+            log_metric("generation_failed", {
+                "metric_label": metric_label,
+                "error_message": str(exc)[:300],
+            }, username=username)
             raise RuntimeError(f"Gemini request failed: {exc}") from exc
 
     elapsed = round(time.perf_counter() - t0, 3)
