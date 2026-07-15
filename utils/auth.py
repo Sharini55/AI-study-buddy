@@ -81,6 +81,7 @@ def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
         if verify_password(user_record.password_hash, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
+            st.session_state["is_admin"] = bool(getattr(user_record, "is_admin", False))
             try:
                 capture("user_logged_in", username, {"username": username})
                 identify(username, {"username": username})
