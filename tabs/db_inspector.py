@@ -174,22 +174,29 @@ def _retention(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _api_health(df: pd.DataFrame) -> pd.DataFrame:
-    """Metric 6 — API Success vs Failure Rate."""
+    """Metric 6 — API Success vs Failure Rate.
+
+    Counts explicit `generation_failed` events (logged from gemini.py whenever a
+    Gemini call raises, including 503 UNAVAILABLE / quota errors) against
+    successful `generation` events. This replaces the old approach of guessing
+    failures from a regex over event names, which missed failures that were
+    caught and silently replaced with a fallback string in the study guide.
+    """
     if df.empty:
         return pd.DataFrame()
 
     gen_events = df[df["event_name"] == "generation"]
-    err_events = df[df["event_name"].str.contains("error|fail|failed", case=False, na=False)]
+    fail_events = df[df["event_name"] == "generation_failed"]
 
-    total_gen = len(gen_events)
-    total_err = len(err_events)
-    total     = total_gen + total_err
-    fail_rate = round(total_err / total * 100, 1) if total else 0
+    total_gen  = len(gen_events)
+    total_fail = len(fail_events)
+    total      = total_gen + total_fail
+    fail_rate  = round(total_fail / total * 100, 1) if total else 0
 
     return pd.DataFrame([{
         "Metric":         "Generation Requests",
         "Count":          total_gen,
-        "Failures":       total_err,
+        "Failures":       total_fail,
         "Failure Rate":   f"{fail_rate}%",
         "Target":         "< 30% failure",
         "Status":         "✅" if fail_rate < 30 else "🔴",
