@@ -153,6 +153,23 @@ def verify_password(stored_signature: str, provided_password: str) -> bool:
         return test == db_hash
     except Exception:
         return False
+        
+def delete_workspace_from_db(username: str, workspace_id: str) -> None:
+    """Permanently deletes a workspace and all its children (files, guides, quizzes)."""
+    db = SessionLocal()
+    try:
+        ws = db.query(Workspace).filter(
+            Workspace.id == workspace_id,
+            Workspace.user_id == username
+        ).first()
+        if ws:
+            db.delete(ws)
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
 
 # ---------------------------------------------------------------------------
 # Faux Object Storage Helpers
