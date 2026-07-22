@@ -617,43 +617,23 @@ def apply_theme() -> None:
             transform: rotate(90deg);
         }
 
-      div[data-testid="stExpander"] details > div {
+        div[data-testid="stExpander"] details > div {
             padding: 0.75rem 1rem !important;
         }
 
-        /* ── Material Icons for password visibility toggle ── */
-        @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
-
+        /* ── Password input toggle button styling fix ── */
         [data-testid="stPasswordInput"] button,
         div[data-baseweb="input-password"] button {
             background: transparent !important;
             border: none !important;
-            cursor: pointer !important;
             padding: 0 8px !important;
-            display: flex !important;
-            align-items: center !important;
+            margin-right: 4px !important;
+            border-radius: 6px !important;
         }
-        [data-testid="stPasswordInput"] button span,
-        div[data-baseweb="input-password"] button span {
-            font-family:    'Material Icons' !important;
-            font-size:      1.2rem !important;
-            color:          var(--muted) !important;
-            font-style:     normal !important;
-            letter-spacing: normal !important;
-            text-transform: none !important;
-            display:        inline-block !important;
-            white-space:    nowrap !important;
-            opacity:        1 !important;
-            width:          auto !important;
-            height:         auto !important;
-            overflow:       visible !important;
+        [data-testid="stPasswordInput"] button:hover,
+        div[data-baseweb="input-password"] button:hover {
+            background: rgba(139, 165, 82, 0.15) !important;
         }
-        [data-testid="stPasswordInput"] button:hover span,
-        div[data-baseweb="input-password"] button:hover span {
-            color: var(--ink) !important;
-        }
-
-        </style>
 
         </style>
         <script>
@@ -1232,17 +1212,9 @@ def render_guide_viewer(guide: dict) -> None:
     render_guide(guide["content"])
 
 
-# ---------------------------------------------------------------------------
-# Admin Dashboard — FIX: no longer creates its own tabs.
-# render_db_inspector_tab() owns all 4 tabs internally.
-# The old version created 3 tabs here then called render_db_inspector_tab()
-# inside one of them, which created 4 more tabs — causing the double tab bug.
-# ---------------------------------------------------------------------------
-
 def render_admin_dashboard(current_user: str) -> None:
     from tabs.db_inspector import render_db_inspector_tab
 
-    # Verify admin in DB — don't trust session state alone
     _db_check = SessionLocal()
     try:
         _user_row = _db_check.query(User).filter(User.username == current_user).first()
@@ -1261,8 +1233,6 @@ def render_admin_dashboard(current_user: str) -> None:
     st.title("🛠 Admin Dashboard")
     st.caption(f"Logged in as **{current_user}**")
 
-    # render_db_inspector_tab handles its own tabs: Database Inspector,
-    # Product Metrics, Per-User Activity, Users
     render_db_inspector_tab()
 
 
