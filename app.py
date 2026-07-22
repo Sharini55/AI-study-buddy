@@ -317,10 +317,13 @@ def apply_theme() -> None:
             min-height:    36px !important;
             cursor:        pointer !important;
         }
-        [data-testid="stFileUploaderDropzone"] button span,
-        [data-testid="stFileUploaderDropzone"] button p,
-        [data-testid="stFileUploaderDropzone"] button div,
-        [data-testid="stFileUploaderDropzone"] button svg {
+          /* Hide original text/icon inside the main Browse/Upload button only.
+           The per-file remove buttons live outside the dropzone zone itself
+           so this selector does NOT match them — no duplicate Upload labels. */
+        [data-testid="stFileUploaderDropzone"] > div > button span,
+        [data-testid="stFileUploaderDropzone"] > div > button p,
+        [data-testid="stFileUploaderDropzone"] > div > button div,
+        [data-testid="stFileUploaderDropzone"] > div > button svg {
             font-size: 0 !important;
             color:     transparent !important;
             fill:      transparent !important;
@@ -329,7 +332,17 @@ def apply_theme() -> None:
             overflow:  hidden !important;
             display:   inline-block !important;
         }
-        [data-testid="stFileUploaderDropzone"] button::after {
+        [data-testid="stFileUploaderDropzone"] > div > button {
+            position:      relative !important;
+            background:    var(--yellow) !important;
+            border:        none !important;
+            border-radius: 999px !important;
+            padding:       6px 28px !important;
+            min-width:     90px !important;
+            min-height:    36px !important;
+            cursor:        pointer !important;
+        }
+        [data-testid="stFileUploaderDropzone"] > div > button::after {
             content:      "Upload" !important;
             position:     absolute !important;
             inset:        0 !important;
@@ -342,6 +355,7 @@ def apply_theme() -> None:
             color:        var(--ink) !important;
             pointer-events: none !important;
         }
+ 
 
         div[data-baseweb="input"] input,
         div[data-baseweb="textarea"] textarea,
