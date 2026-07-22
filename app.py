@@ -622,59 +622,32 @@ def apply_theme() -> None:
         }
 
         /* ── Password input toggle button styling fix ── */
-        [data-testid="stPasswordInput"] button,
-        div[data-baseweb="input-password"] button {
-            position:      relative !important;
-            background:    transparent !important;
-            border:        none !important;
-            padding:       0 !important;
-            margin-right:  4px !important;
-            width:         30px !important;
-            min-width:     30px !important;
-            height:        30px !important;
-            min-height:    30px !important;
-            border-radius: 6px !important;
-            cursor:        pointer !important;
-            overflow:      hidden !important;
-        }
-        [data-testid="stPasswordInput"] button:hover,
-        div[data-baseweb="input-password"] button:hover {
-            background: rgba(139, 165, 82, 0.15) !important;
-        }
-        /* hide whatever Streamlit renders inside (icon-font text like "visibility") */
-        [data-testid="stPasswordInput"] button svg,
-        [data-testid="stPasswordInput"] button span,
-        [data-testid="stPasswordInput"] button p,
-        [data-testid="stPasswordInput"] button div,
-        div[data-baseweb="input-password"] button svg,
-        div[data-baseweb="input-password"] button span,
-        div[data-baseweb="input-password"] button p,
-        div[data-baseweb="input-password"] button div {
-            font-size:  0 !important;
-            color:      transparent !important;
-            fill:       transparent !important;
-            opacity:    0 !important;
-            width:      0 !important;
-            height:     0 !important;
-            overflow:   hidden !important;
-        }
-        /* draw our own eye icon instead */
-        [data-testid="stPasswordInput"] button::after,
-        div[data-baseweb="input-password"] button::after {
-            content:         "\\1F441";
-            position:        absolute !important;
-            inset:           0 !important;
+        /* Password fields use the same stTextInput wrapper as regular text
+           inputs. Only the password variant renders a button inside that
+           wrapper, so this only ever matches the reveal toggle. Its actual
+           icon content is rewritten by fixPasswordToggleBtn() in the script
+           below - this block just sizes/styles the button as a clean slot. */
+        [data-testid="stTextInput"] button {
+            position:        relative !important;
+            background:      transparent !important;
+            border:          none !important;
+            padding:         0 !important;
+            margin-right:    4px !important;
+            width:           30px !important;
+            min-width:       30px !important;
+            height:          30px !important;
+            min-height:      30px !important;
+            border-radius:   6px !important;
+            cursor:          pointer !important;
             display:         flex !important;
             align-items:     center !important;
             justify-content: center !important;
-            font-size:       1rem !important;
+            font-size:       16px !important;
             line-height:     1 !important;
             color:           var(--muted) !important;
-            pointer-events:  none !important;
         }
-        [data-testid="stPasswordInput"] button[aria-label*="Hide" i]::after,
-        div[data-baseweb="input-password"] button[aria-label*="Hide" i]::after {
-            content: "\\1F576";
+        [data-testid="stTextInput"] button:hover {
+            background: rgba(139, 165, 82, 0.15) !important;
         }
 
         </style>
@@ -727,7 +700,31 @@ def apply_theme() -> None:
                 });
             }
 
-            function _runAll() { initSidebar(); fixFileUploaderBtn(); }
+            function fixPasswordToggleBtn() {
+                document.querySelectorAll('[data-testid="stTextInput"] button').forEach(function(btn) {
+                    var label = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    var txt = (btn.textContent || '').trim().toLowerCase();
+                    // only touch buttons that are actually the reveal/hide toggle
+                    var isToggle = label.indexOf('password') !== -1 ||
+                                   label.indexOf('show') !== -1 ||
+                                   label.indexOf('hide') !== -1 ||
+                                   txt.indexOf('visib') !== -1;
+                    if (!isToggle) return;
+
+                    var isCurrentlyRevealed = label.indexOf('hide') !== -1 || txt.indexOf('_off') === -1 && txt.indexOf('visibility_off') !== -1;
+                    var icon = (label.indexOf('hide') !== -1) ? '🙈' : '👁';
+
+                    if (btn.dataset.sbIcon === icon) return; // already correct, skip re-render
+                    btn.innerHTML = '';
+                    var span = document.createElement('span');
+                    span.textContent = icon;
+                    span.style.pointerEvents = 'none';
+                    btn.appendChild(span);
+                    btn.dataset.sbIcon = icon;
+                });
+            }
+
+            function _runAll() { initSidebar(); fixFileUploaderBtn(); fixPasswordToggleBtn(); }
             var _mo = new MutationObserver(_runAll);
             _mo.observe(document.body, {childList: true, subtree: true});
             _runAll();
