@@ -126,7 +126,7 @@ def render_login_signup_ui():
         """
         <div style="text-align:center; margin-top:2rem; margin-bottom:2rem;">
             <h1 style="color:#8C1D40; font-size:2.8rem; font-weight:800;
-                       letter-spacing:-1px; margin-bottom:0.2rem;">🔱 SunDevil AI</h1>
+                       letter-spacing:-1px; margin-bottom:0.2rem;">AI Study Buddy</h1>
             <p style="color:#6F6A60; font-size:1.15rem;">
                 Active-Recall Study Workspaces
             </p>
