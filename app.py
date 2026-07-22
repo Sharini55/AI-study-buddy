@@ -51,6 +51,29 @@ def apply_theme() -> None:
             font-family: 'Truculenta', sans-serif !important;
         }
 
+        /* Streamlit renders its own icons (password eye, sidebar arrows, etc.)
+           as ligature text like "visibility" or "keyboard_double_arrow_right"
+           inside spans with data-testid="stIconMaterial", using the
+           "Material Symbols Rounded" font to turn that text into a glyph.
+           The blanket Truculenta rule above overrides that font on every
+           span (and everything in the sidebar), which breaks the ligature
+           and shows the raw words instead of icons. Restore the icon font
+           here so those glyphs render correctly again. */
+        [data-testid="stIconMaterial"] {
+            font-family: 'Material Symbols Rounded' !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            line-height: 1 !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+            white-space: nowrap !important;
+            word-wrap: normal !important;
+            direction: ltr !important;
+            -webkit-font-feature-settings: 'liga' !important;
+            font-feature-settings: 'liga' !important;
+            -webkit-font-smoothing: antialiased !important;
+        }
+
         header[data-testid="stHeader"] {
             background: transparent !important;
             border: none !important;
@@ -624,9 +647,9 @@ def apply_theme() -> None:
         /* ── Password input toggle button styling fix ── */
         /* Password fields use the same stTextInput wrapper as regular text
            inputs. Only the password variant renders a button inside that
-           wrapper, so this only ever matches the reveal toggle. Its actual
-           icon content is rewritten by fixPasswordToggleBtn() in the script
-           below - this block just sizes/styles the button as a clean slot. */
+           wrapper, so this only ever matches the reveal toggle. The icon
+           itself is fixed by the stIconMaterial font-family rule above -
+           this just sizes/styles the button as a clean, consistent slot. */
         [data-testid="stTextInput"] button {
             position:        relative !important;
             background:      transparent !important;
@@ -700,31 +723,7 @@ def apply_theme() -> None:
                 });
             }
 
-            function fixPasswordToggleBtn() {
-                document.querySelectorAll('[data-testid="stTextInput"] button').forEach(function(btn) {
-                    var label = (btn.getAttribute('aria-label') || '').toLowerCase();
-                    var txt = (btn.textContent || '').trim().toLowerCase();
-                    // only touch buttons that are actually the reveal/hide toggle
-                    var isToggle = label.indexOf('password') !== -1 ||
-                                   label.indexOf('show') !== -1 ||
-                                   label.indexOf('hide') !== -1 ||
-                                   txt.indexOf('visib') !== -1;
-                    if (!isToggle) return;
-
-                    var isCurrentlyRevealed = label.indexOf('hide') !== -1 || txt.indexOf('_off') === -1 && txt.indexOf('visibility_off') !== -1;
-                    var icon = (label.indexOf('hide') !== -1) ? '🙈' : '👁';
-
-                    if (btn.dataset.sbIcon === icon) return; // already correct, skip re-render
-                    btn.innerHTML = '';
-                    var span = document.createElement('span');
-                    span.textContent = icon;
-                    span.style.pointerEvents = 'none';
-                    btn.appendChild(span);
-                    btn.dataset.sbIcon = icon;
-                });
-            }
-
-            function _runAll() { initSidebar(); fixFileUploaderBtn(); fixPasswordToggleBtn(); }
+            function _runAll() { initSidebar(); fixFileUploaderBtn(); }
             var _mo = new MutationObserver(_runAll);
             _mo.observe(document.body, {childList: true, subtree: true});
             _runAll();
