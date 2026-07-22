@@ -617,9 +617,43 @@ def apply_theme() -> None:
             transform: rotate(90deg);
         }
 
-        div[data-testid="stExpander"] details > div {
+      div[data-testid="stExpander"] details > div {
             padding: 0.75rem 1rem !important;
         }
+
+        /* ── Material Icons for password visibility toggle ── */
+        @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+        [data-testid="stPasswordInput"] button,
+        div[data-baseweb="input-password"] button {
+            background: transparent !important;
+            border: none !important;
+            cursor: pointer !important;
+            padding: 0 8px !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        [data-testid="stPasswordInput"] button span,
+        div[data-baseweb="input-password"] button span {
+            font-family:    'Material Icons' !important;
+            font-size:      1.2rem !important;
+            color:          var(--muted) !important;
+            font-style:     normal !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+            display:        inline-block !important;
+            white-space:    nowrap !important;
+            opacity:        1 !important;
+            width:          auto !important;
+            height:         auto !important;
+            overflow:       visible !important;
+        }
+        [data-testid="stPasswordInput"] button:hover span,
+        div[data-baseweb="input-password"] button:hover span {
+            color: var(--ink) !important;
+        }
+
+        </style>
 
         </style>
         <script>
