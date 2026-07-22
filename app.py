@@ -624,15 +624,57 @@ def apply_theme() -> None:
         /* ── Password input toggle button styling fix ── */
         [data-testid="stPasswordInput"] button,
         div[data-baseweb="input-password"] button {
-            background: transparent !important;
-            border: none !important;
-            padding: 0 8px !important;
-            margin-right: 4px !important;
+            position:      relative !important;
+            background:    transparent !important;
+            border:        none !important;
+            padding:       0 !important;
+            margin-right:  4px !important;
+            width:         30px !important;
+            min-width:     30px !important;
+            height:        30px !important;
+            min-height:    30px !important;
             border-radius: 6px !important;
+            cursor:        pointer !important;
+            overflow:      hidden !important;
         }
         [data-testid="stPasswordInput"] button:hover,
         div[data-baseweb="input-password"] button:hover {
             background: rgba(139, 165, 82, 0.15) !important;
+        }
+        /* hide whatever Streamlit renders inside (icon-font text like "visibility") */
+        [data-testid="stPasswordInput"] button svg,
+        [data-testid="stPasswordInput"] button span,
+        [data-testid="stPasswordInput"] button p,
+        [data-testid="stPasswordInput"] button div,
+        div[data-baseweb="input-password"] button svg,
+        div[data-baseweb="input-password"] button span,
+        div[data-baseweb="input-password"] button p,
+        div[data-baseweb="input-password"] button div {
+            font-size:  0 !important;
+            color:      transparent !important;
+            fill:       transparent !important;
+            opacity:    0 !important;
+            width:      0 !important;
+            height:     0 !important;
+            overflow:   hidden !important;
+        }
+        /* draw our own eye icon instead */
+        [data-testid="stPasswordInput"] button::after,
+        div[data-baseweb="input-password"] button::after {
+            content:         "\\1F441";
+            position:        absolute !important;
+            inset:           0 !important;
+            display:         flex !important;
+            align-items:     center !important;
+            justify-content: center !important;
+            font-size:       1rem !important;
+            line-height:     1 !important;
+            color:           var(--muted) !important;
+            pointer-events:  none !important;
+        }
+        [data-testid="stPasswordInput"] button[aria-label*="Hide" i]::after,
+        div[data-baseweb="input-password"] button[aria-label*="Hide" i]::after {
+            content: "\\1F576";
         }
 
         </style>
