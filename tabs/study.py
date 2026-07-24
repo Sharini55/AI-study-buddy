@@ -6,7 +6,7 @@ import time
 
 import streamlit as st
 
-from utils.gemini import generate_study_guide_sot
+from utils.gemini import generate_study_guide_sot, describe_gemini_error
 from utils.guide import render_guide
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def render_study_tab(api_key: str, subject: str, workspace: dict, mode: str) -> 
                 _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
-                st.error("Study guide generation failed. Check your API key and try again.")
+                st.error(describe_gemini_error(exc))
 
     if workspace["generated_notes"]:
         guide_hash = hashlib.sha256(workspace["generated_notes"].encode()).hexdigest()[:8]
