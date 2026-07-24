@@ -8,7 +8,7 @@ import streamlit as st
 # Strip that prefix before we add our own so we never get "A. A. ..." doubles.
 _PREFIX_RE = re.compile(r'^[A-Da-d]\.\s*')
 
-from utils.gemini import call_gemini, generate_remediation_pooled
+from utils.gemini import call_gemini, generate_remediation_pooled, describe_gemini_error
 from utils.files import parse_json_response
 from utils.guide import quiz_prompt, targeted_quiz_prompt, render_guide
 from utils.metrics import log_metric, report_generation_metrics
@@ -58,7 +58,7 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                     )
                 except Exception as exc:
                     logger.error("Quiz generation failed: %s", exc, exc_info=True)
-                    st.error("Quiz generation failed. Check your API key and try again.")
+                    st.error(describe_gemini_error(exc))
 
     quiz = st.session_state[quiz_key]
     if not quiz:
@@ -192,7 +192,7 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                             })
                         except Exception as exc:
                             logger.error("Weak area guide failed: %s", exc, exc_info=True)
-                            st.error("Failed to generate targeted guide. Check your API key and try again.")
+                            st.error(describe_gemini_error(exc))
 
             with col2:
                 if st.button("🔄 Full Retake", use_container_width=True):
@@ -224,7 +224,7 @@ def render_quiz_tab(api_key: str, subject: str, workspace: dict) -> None:
                             st.rerun()
                         except Exception as exc:
                             logger.error("Targeted quiz failed: %s", exc, exc_info=True)
-                            st.error("Failed to generate targeted quiz. Check your API key and try again.")
+                            st.error(describe_gemini_error(exc))
 
             if workspace.get("weak_area_report"):
                 st.markdown("---")
