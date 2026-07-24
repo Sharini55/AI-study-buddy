@@ -20,6 +20,60 @@ def get_gemini_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key.strip())
 
 
+def describe_gemini_error(exc: Exception) -> str:
+    """
+    Turn a raw Gemini/genai exception into a specific, actionable message
+    instead of a generic "check your API key" catch-all. Matches on the
+    substrings Google's SDK/API actually puts in its error text.
+    """
+    msg = str(exc)
+    lower = msg.lower()
+
+    if "api key not valid" in lower or "api_key_invalid" in lower or "invalid api key" in lower:
+        return (
+            "❌ Your Gemini API key looks invalid. Double-check you copied the "
+            "**entire** key with no extra spaces or line breaks, and that it's "
+            "still active in [Google AI Studio](https://aistudio.google.com/app/apikey)."
+        )
+    if "permission_denied" in lower or re.search(r"\b403\b", msg):
+        return (
+            "❌ Gemini rejected this API key (permission denied). This usually means "
+            "billing/API access isn't enabled for the Google Cloud project the key "
+            "belongs to, or the key doesn't have access to this model."
+        )
+    if "resource_exhausted" in lower or "quota" in lower or re.search(r"\b429\b", msg):
+        return (
+            "⏳ You've hit Gemini's rate limit or quota for this key (HTTP 429). "
+            "Free-tier keys have a low requests-per-minute limit — wait a minute "
+            "and try again, or check usage/billing in Google AI Studio."
+        )
+    if "not_found" in lower or re.search(r"\b404\b", msg):
+        return (
+            f"❌ Gemini couldn't find the model `{GEMINI_MODEL}`. This can happen if "
+            "the model name was retired or isn't available for your key's region/tier."
+        )
+    if "unauthenticated" in lower or re.search(r"\b401\b", msg):
+        return (
+            "❌ Gemini rejected the request as unauthenticated. The API key may be "
+            "missing, expired, or malformed — try re-pasting it in Settings."
+        )
+    if "deadline" in lower or "timeout" in lower or "timed out" in lower:
+        return "⏳ The request to Gemini timed out. This is usually temporary — try again in a moment."
+    if "safety" in lower and ("block" in lower or "filter" in lower):
+        return (
+            "🚫 Gemini blocked this response due to its safety filters. Try "
+            "rephrasing the source material or splitting it into smaller pieces."
+        )
+    if "connection" in lower or "network" in lower or "dns" in lower:
+        return "🌐 Couldn't reach Gemini's servers. Check your network connection and try again."
+
+    # Fallback: still show the real error, just trimmed, instead of a vague catch-all
+    trimmed = msg.strip()
+    if len(trimmed) > 280:
+        trimmed = trimmed[:280] + "…"
+    return f"❌ Gemini request failed: {trimmed}"
+
+
 def _safe_str(text: str) -> str:
     """Normalize unicode to avoid ASCII-codec errors downstream."""
     replacements = {
