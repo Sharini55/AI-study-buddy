@@ -18,7 +18,8 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          # MATCH THIS to your Azure App Service Python Runtime (usually 3.11)
+          python-version: '3.11'
 
       - name: Create virtual environment and install dependencies
         run: |
@@ -31,16 +32,18 @@ jobs:
         run: |
           echo '#!/bin/bash
           source /home/site/wwwroot/antenv/bin/activate
-          exec streamlit run /home/site/wwwroot/app.py --server.port 8000 --server.address 0.0.0.0' > startup.sh
+          exec python -m streamlit run /home/site/wwwroot/app.py --server.port 8000 --server.address 0.0.0.0' > startup.sh
           chmod +x startup.sh
 
-      # Now we include antenv in the artifact because SCM_DO_BUILD_DURING_DEPLOYMENT=false
-      # Azure will not build anything server-side — we send the pre-built environment
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: .
+          path: |
+            .
+            !__pycache__
+            !.git
+            !.github
 
   deploy:
     runs-on: ubuntu-latest
