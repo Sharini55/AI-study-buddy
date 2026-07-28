@@ -17,7 +17,6 @@ MAX_IMAGE_EDGE = 1024
 MAX_UPLOAD_MB = 50                          # hard cap: files larger than this are rejected
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 IMAGE_ANALYSIS_PROMPT = "This is a computer science slide. Transcribe the code and explain any diagrams."
-GEMINI_MODEL = "gemini-2.5-flash"
 
 # Strict extension whitelist — nothing outside this set is processed
 _ALLOWED_EXTENSIONS: frozenset[str] = frozenset({"pdf", "pptx", "jpg", "jpeg", "png", "txt"})
@@ -143,10 +142,11 @@ def analyze_image(api_key: str, image_bytes: bytes, mime_type: str) -> tuple[str
     if not api_key:
         return "", True
     try:
-        from utils.gemini import get_gemini_client
+        from utils.gemini import get_gemini_client, resolve_model
         client = get_gemini_client(api_key)
+        model = resolve_model(api_key)
         response = client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model,
             contents=[IMAGE_ANALYSIS_PROMPT,
                       types.Part.from_bytes(data=validated_bytes, mime_type=validated_mime)],
         )
