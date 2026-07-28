@@ -1128,7 +1128,19 @@ def render_settings_page(current_user: str) -> None:
         'style="color:var(--green-dark);">Get a free key here →</a>',
         unsafe_allow_html=True,
     )
-    st.caption(f"Active model: `{GEMINI_MODEL}`")
+    from utils.gemini import GEMINI_MODEL
+    if st.session_state.get("gemini_api_key"):
+        # Each key can have access to a different model depending on its
+        # Google Cloud project/region/tier — show what THIS key actually
+        # resolves to, not just the hardcoded default.
+        try:
+            from utils.gemini import resolve_model
+            active_model = resolve_model(st.session_state["gemini_api_key"])
+        except Exception:
+            active_model = GEMINI_MODEL
+    else:
+        active_model = GEMINI_MODEL
+    st.caption(f"Active model: `{active_model}`")
 
     api_key_val = st.session_state.get("gemini_api_key", "")
     api_key_input = st.text_input(
