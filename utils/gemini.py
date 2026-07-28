@@ -20,6 +20,49 @@ def get_gemini_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key.strip())
 
 
+# Preference order — first candidate the key actually has access to wins.
+_MODEL_CANDIDATES = [
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-3-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+]
+
+
+@st.cache_resource
+def resolve_model(api_key: str) -> str:
+    """
+    Different API keys can have access to different Gemini models depending
+    on the Google Cloud project, region, or account tier they're tied to —
+    hardcoding one model name breaks for any key that doesn't have it.
+    Instead, ask the key what it can actually see (client.models.list())
+    and return the best match from a preference-ordered candidate list.
+    Cached per-key so this list call only happens once per session.
+    """
+    client = get_gemini_client(api_key)
+    try:
+        available = set()
+        for m in client.models.list():
+            name = getattr(m, "name", "") or ""
+            available.add(name.rsplit("/", 1)[-1])  # "models/gemini-2.5-flash" -> "gemini-2.5-flash"
+
+        for candidate in _MODEL_CANDIDATES:
+            if candidate in available:
+                return candidate
+
+        # None of our known candidates matched — fall back to any flash/pro
+        # text model this key can see, rather than giving up entirely.
+        for name in available:
+            if "flash" in name or "pro" in name:
+                return name
+    except Exception:
+        pass  # fall through to the hardcoded default below
+
+    return GEMINI_MODEL  # last resort; describe_gemini_error() explains if this 404s too
+
+
 def describe_gemini_error(exc: Exception) -> str:
     """
     Turn a raw Gemini/genai exception into a specific, actionable message
@@ -87,12 +130,12 @@ def _safe_str(text: str) -> str:
     return text.encode("utf-8", errors="replace").decode("utf-8")
 
 
-def _gemini_generate(client: genai.Client, contents: list, retries: int = 4) -> str:
+def _gemini_generate(client: genai.Client, contents: list, model: str, retries: int = 4) -> str:
     """Call Gemini with exponential backoff on 429 / quota errors."""
     for attempt in range(retries):
         try:
             response = client.models.generate_content(
-                model=GEMINI_MODEL,
+                model=model,
                 contents=contents,
             )
             return _safe_str(response.text or "")
@@ -164,13 +207,14 @@ def generate_study_guide_sot(
     from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
 
     client = get_gemini_client(api_key)
+    model = resolve_model(api_key)
     t0 = time.perf_counter()
     total_input_tokens = 0
     total_output_tokens = 0
 
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
-    skeleton_raw = _gemini_generate(client, [skel_text])
+    skeleton_raw = _gemini_generate(client, [skel_text], model)
     topics = _parse_skeleton(skeleton_raw)
     total_input_tokens += _count_tokens(skel_text)
     total_output_tokens += _count_tokens(skeleton_raw)
@@ -188,7 +232,7 @@ def generate_study_guide_sot(
     def _write_section(idx: int, topic: str) -> tuple[int, str, int, int]:
         prompt_text = _safe_str(section_prompt(topic, subject, workspace, mode))
         try:
-            text = _gemini_generate(client, [prompt_text])
+            text = _gemini_generate(client, [prompt_text], model)
             return idx, text, _count_tokens(prompt_text), _count_tokens(text)
         except Exception as exc:
             log_metric("generation_failed", {
@@ -294,6 +338,7 @@ def generate_remediation_pooled(
     ]
 
     client = get_gemini_client(api_key)
+    model = resolve_model(api_key)
     t0 = time.perf_counter()
     total_input_tokens = 0
     total_output_tokens = 0
@@ -310,7 +355,7 @@ def generate_remediation_pooled(
         with collect_lock:
             collected_prompts.append(prompt_text)
         try:
-            text = _gemini_generate(client, [prompt_text])
+            text = _gemini_generate(client, [prompt_text], model)
             return batch_idx, text, prompt_text, _count_tokens(prompt_text), _count_tokens(text)
         except Exception as exc:
             log_metric("generation_failed", {
@@ -391,9 +436,10 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
     
     t0 = time.perf_counter()
     client = get_gemini_client(api_key)
+    model = resolve_model(api_key)
 
     try:
-        output = _gemini_generate(client, [prompt, *image_parts])
+        output = _gemini_generate(client, [prompt, *image_parts], model)
     except Exception as exc:
         # If visual analysis failed and we had images, fallback gracefully to text-only evaluation
         if image_parts:
@@ -401,7 +447,7 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
                 "Visual analysis failed for this slide, but text was processed successfully."
             )
             try:
-                output = _gemini_generate(client, [prompt])
+                output = _gemini_generate(client, [prompt], model)
             except Exception as exc2:
                 log_metric("generation_failed", {
                     "metric_label": metric_label,
