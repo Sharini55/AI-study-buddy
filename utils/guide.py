@@ -161,6 +161,79 @@ def quiz_prompt(subject: str, workspace: dict) -> str:
     ).strip()
 
 
+def diagnostic_quiz_prompt(subject: str, workspace: dict, num_questions: int = 15) -> str:
+    """
+    Adaptive Study baseline diagnostic: a single broad quiz that deliberately
+    spans as many distinct topics in the materials as possible, so the agent
+    has real per-topic signal to perceive/score before it picks a focus area —
+    without this, decide_next_target() has nothing to work from on a brand
+    new workspace.
+    """
+    return dedent(
+        f"""
+        You are an expert diagnostic quiz writer.
+        Generate exactly {num_questions} multiple-choice questions using ONLY the
+        workspace materials below.
+
+        This is a DIAGNOSTIC assessment: deliberately spread the questions across
+        as many DIFFERENT topics/sections in the materials as you can, rather than
+        clustering on one topic. The goal is a broad read on the student's standing
+        across the whole subject, not depth on any single area.
+
+        Base every question strictly on content present in the materials.
+
+        Return strict JSON only. No Markdown fences.
+        Format:
+        {{
+          "questions": [
+            {{
+              "question": "Question text",
+              "choices": ["A. ...", "B. ...", "C. ...", "D. ..."],
+              "answer_index": 0,
+              "topic": "Topic name",
+              "explanation": "Why the correct answer is right"
+            }}
+          ]
+        }}
+
+        Workspace materials:
+        {workspace["processed_text"] if workspace["processed_text"] else "No text extracted. Use attached images."}
+        """
+    ).strip()
+
+
+def topic_quiz_prompt(topic: str, subject: str, workspace: dict, num_questions: int) -> str:
+    """
+    Adaptive Study focus round: generate exactly num_questions on ONE named
+    topic. Question count is chosen by the caller (utils.agent.dynamic_question_count)
+    based on how far the student is from mastering this specific topic.
+    """
+    return dedent(
+        f"""
+        You are an expert quiz writer.
+        The student is focusing on ONE topic right now: "{topic}".
+        Generate exactly {num_questions} multiple-choice questions targeting ONLY this
+        topic, using ONLY content from the workspace materials below.
+
+        Return strict JSON only. No Markdown fences.
+        {{
+          "questions": [
+            {{
+              "question": "Question text",
+              "choices": ["A. ...", "B. ...", "C. ...", "D. ..."],
+              "answer_index": 0,
+              "topic": "{topic}",
+              "explanation": "Why the correct answer is right"
+            }}
+          ]
+        }}
+
+        Workspace materials:
+        {workspace["processed_text"] if workspace["processed_text"] else "No text extracted. Use attached images."}
+        """
+    ).strip()
+
+
 def batched_remediation_prompt(
     topics_batch: list[str],
     missed_per_topic: dict[str, list[str]],
