@@ -317,13 +317,10 @@ def apply_theme() -> None:
             min-height:    36px !important;
             cursor:        pointer !important;
         }
-          /* Hide original text/icon inside the main Browse/Upload button only.
-           The per-file remove buttons live outside the dropzone zone itself
-           so this selector does NOT match them — no duplicate Upload labels. */
-        [data-testid="stFileUploaderDropzone"] > div > button span,
-        [data-testid="stFileUploaderDropzone"] > div > button p,
-        [data-testid="stFileUploaderDropzone"] > div > button div,
-        [data-testid="stFileUploaderDropzone"] > div > button svg {
+        [data-testid="stFileUploaderDropzone"] button span,
+        [data-testid="stFileUploaderDropzone"] button p,
+        [data-testid="stFileUploaderDropzone"] button div,
+        [data-testid="stFileUploaderDropzone"] button svg {
             font-size: 0 !important;
             color:     transparent !important;
             fill:      transparent !important;
@@ -332,17 +329,7 @@ def apply_theme() -> None:
             overflow:  hidden !important;
             display:   inline-block !important;
         }
-        [data-testid="stFileUploaderDropzone"] > div > button {
-            position:      relative !important;
-            background:    var(--yellow) !important;
-            border:        none !important;
-            border-radius: 999px !important;
-            padding:       6px 28px !important;
-            min-width:     90px !important;
-            min-height:    36px !important;
-            cursor:        pointer !important;
-        }
-        [data-testid="stFileUploaderDropzone"] > div > button::after {
+        [data-testid="stFileUploaderDropzone"] button::after {
             content:      "Upload" !important;
             position:     absolute !important;
             inset:        0 !important;
@@ -355,7 +342,6 @@ def apply_theme() -> None:
             color:        var(--ink) !important;
             pointer-events: none !important;
         }
- 
 
         div[data-baseweb="input"] input,
         div[data-baseweb="textarea"] textarea,
@@ -691,10 +677,11 @@ def apply_theme() -> None:
         <script>
         (function() {
             var NAV_ICONS = {
-                'Dashboard':    'ti-layout-dashboard',
-                'Study guide':  'ti-book',
-                'Quiz':         'ti-help-circle',
-                'Saved Guides': 'ti-bookmark',
+                'Dashboard':      'ti-layout-dashboard',
+                'Study guide':    'ti-book',
+                'Quiz':           'ti-help-circle',
+                'Adaptive Study': 'ti-target-arrow',
+                'Saved Guides':   'ti-bookmark',
             };
 
             function initSidebar() {
@@ -970,7 +957,7 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
 
         _sb_section("Navigation")
         current_page = st.session_state.get("current_page", "Dashboard")
-        nav_pages = ["Dashboard", "Study guide", "Quiz", "Saved Guides"]
+        nav_pages = ["Dashboard", "Study guide", "Quiz", "Adaptive Study", "Saved Guides"]
         for page in nav_pages:
             is_active = current_page == page
             btn_type = "primary" if is_active else "secondary"
@@ -1389,6 +1376,7 @@ def main() -> None:
     from tabs.ingest import render_ingest_tab
     from tabs.study import render_study_tab
     from tabs.quiz import render_quiz_tab
+    from tabs.adaptive_study import render_adaptive_study_tab
 
     if current_page == "Saved Guides":
         render_saved_guides_page()
@@ -1410,6 +1398,10 @@ def main() -> None:
             ),
             "Quiz": (
                 "<i class='ti ti-help-circle' style='color:#D9A441;margin-right:8px;'></i>Interactive Quiz",
+                subject,
+            ),
+            "Adaptive Study": (
+                "🎯 Adaptive Study",
                 subject,
             ),
         }
@@ -1460,6 +1452,8 @@ def main() -> None:
             render_study_tab(api_key, subject, workspace, study_mode)
         elif current_page == "Quiz":
             render_quiz_tab(api_key, subject, workspace)
+        elif current_page == "Adaptive Study":
+            render_adaptive_study_tab(api_key, subject, workspace)
 
     if st.session_state["is_dirty"]:
         save_active_workspace_to_db(current_user, subject, workspace)
