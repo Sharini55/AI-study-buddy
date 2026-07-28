@@ -40,6 +40,25 @@ MIN_ATTEMPTS_FOR_CONFIDENCE = 3
 # letting one lucky/unlucky question overwrite months of evidence.
 RECENCY_EMA_ALPHA = 0.4
 
+# Adaptive Study: how many questions a focus round gets, scaled to how much
+# ground is left on that topic. A brand-new/weak topic (score near 0) gets
+# the most questions since there's a lot to cover; a topic close to mastery
+# gets fewer, since we're just confirming it's solid.
+MIN_QUESTIONS_PER_ROUND = 3
+MAX_QUESTIONS_PER_ROUND = 20
+
+
+def dynamic_question_count(score: float) -> int:
+    """
+    Linear interpolation: MAX_QUESTIONS_PER_ROUND at score=0 down to
+    MIN_QUESTIONS_PER_ROUND at score=100. E.g. score 20 -> ~17 questions,
+    score 90 -> ~5 questions, matching "more ground left = more questions."
+    """
+    score = max(0.0, min(100.0, score))
+    frac = score / 100.0
+    count = MAX_QUESTIONS_PER_ROUND - frac * (MAX_QUESTIONS_PER_ROUND - MIN_QUESTIONS_PER_ROUND)
+    return int(max(MIN_QUESTIONS_PER_ROUND, min(MAX_QUESTIONS_PER_ROUND, round(count))))
+
 
 @dataclass
 class TopicMastery:
