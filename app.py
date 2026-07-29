@@ -1335,6 +1335,9 @@ def main() -> None:
     apply_theme()
 
     if not st.session_state["authenticated"]:
+        from tabs.landing import render_marketing_landing
+        render_marketing_landing()
+        st.markdown('<div id="sdai-login"></div>', unsafe_allow_html=True)
         render_login_signup_ui()
         st.stop()
 
