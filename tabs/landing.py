@@ -1,367 +1,810 @@
-"""
-Marketing landing content, embedded directly above the login/signup form on
-the unauthenticated screen (Option B: same page, no separate domain needed).
-
-This is adapted from the standalone landing/index.html built for optional
-separate hosting (e.g. GitHub Pages) later. Two differences from that file:
-
-  1. Every CSS rule is scoped under #sdai-landing (including bare-tag resets
-     like `h1`, `body`, `*`) so nothing here leaks onto the rest of the app,
-     and critical properties carry !important so they reliably win against
-     apply_theme()'s own blanket !important rules on h1-h6/p/span/etc, which
-     would otherwise force Truculenta onto body copy that's meant to be Inter.
-  2. CTA buttons link to #sdai-login (an anchor placed just above the login
-     form in app.py) instead of an external URL, since this version already
-     lives on the same page as that form.
-"""
-
 import streamlit as st
+import streamlit.components.v1 as components
 
-_LANDING_HTML = r"""
-<div id="sdai-landing">
+
+def render_landing_page(on_login_click=None):
+    """
+    Renders the AI Study Buddy marketing landing page.
+    Uses st.components.v1.html() so the full HTML/CSS is parsed by a real
+    browser engine inside an iframe — no Markdown pre-processing that would
+    print <style> blocks as visible text.
+
+    on_login_click: optional callback; if supplied, the CTA buttons call it
+    via Streamlit's component messaging.  If None the buttons just scroll the
+    parent page to whatever element has id="login-section".
+    """
+
+    html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-  #sdai-landing {
-    --sdai-bg:          #F5F8EE;
-    --sdai-sidebar:     #ECF1E2;
-    --sdai-panel:       #FFFFFF;
-    --sdai-ink:         #242B18;
-    --sdai-muted:       #5C6A48;
-    --sdai-line:        #C5D99A;
-    --sdai-green:       #ABC270;
-    --sdai-green-dark:  #8BA552;
-    --sdai-yellow:      #D9A441;
-    --sdai-orange:      #C18A2A;
-    --sdai-glow:        rgba(171, 194, 112, 0.22);
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    font-family: 'Inter', -apple-system, sans-serif !important;
-    background: var(--sdai-bg) !important;
-    color: var(--sdai-ink) !important;
-    line-height: 1.55;
+  :root {
+    --bg:         #F5F8EE;
+    --ink:        #242B18;
+    --muted:      #5C6A48;
+    --line:       #C5D99A;
+    --green:      #ABC270;
+    --green-dark: #8BA552;
+    --yellow:     #D9A441;
+    --panel:      #FFFFFF;
+    --sans:       'Inter', system-ui, sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 48px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .nav-logo {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    text-decoration: none;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .nav-links a:hover { color: var(--ink); }
+
+  .btn-login {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--yellow);
+    border: none;
+    border-radius: 100px;
+    padding: 8px 20px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.15s;
+  }
+
+  .btn-login:hover { background: #C4922E; }
+
+  /* ── SECTIONS ── */
+  section {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 80px 48px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    text-align: center;
+    padding-top: 96px;
+    padding-bottom: 80px;
+  }
+
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    background: rgba(171,194,112,0.15);
+    border-radius: 100px;
+    padding: 4px 12px;
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+    color: var(--ink);
+    margin-bottom: 20px;
+  }
+
+  .hero-sub {
+    font-size: 1.05rem;
+    color: var(--muted);
+    max-width: 520px;
+    margin: 0 auto 36px;
+    line-height: 1.65;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .btn-primary {
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--yellow);
+    border: none;
+    border-radius: 100px;
+    padding: 12px 28px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-primary:hover { background: #C4922E; }
+
+  .btn-ghost {
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+    border: 1.5px solid var(--line);
+    border-radius: 100px;
+    padding: 11px 24px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+
+  .hero-note {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ── MOCKUP WINDOW ── */
+  .mockup-window {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(36,43,24,0.08);
+    margin-top: 56px;
+    max-width: 780px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .mockup-bar {
+    background: #F0F4E8;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #FF6B6B; }
+  .dot-y { background: #FFD93D; }
+  .dot-g { background: #6BCB77; }
+
+  .mockup-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    min-height: 280px;
+  }
+
+  .mockup-sidebar {
+    background: #F7F9F2;
+    border-right: 1px solid var(--line);
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .mockup-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .mockup-nav-item.active {
+    background: var(--yellow);
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  .mockup-main {
+    padding: 20px 24px;
+  }
+
+  .mockup-main h4 {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 1.02rem;
+    margin: 0 0 4px;
+  }
+
+  .mockup-main .sdai-sub {
+    color: var(--muted);
+    font-size: 0.83rem;
+    margin-bottom: 20px;
+  }
+
+  .mockup-panel {
+    background: #fff;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+
+  .mockup-target {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .mockup-target span {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .sdai-mastery-card {
+    background: #fff;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+
+  .sdai-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    background: rgba(171,194,112,0.15);
+    border-radius: 100px;
+    padding: 3px 9px;
+    margin-bottom: 12px;
+  }
+
+  .sdai-m-row {
+    margin-bottom: 10px;
+  }
+
+  .sdai-m-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  .sdai-score {
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+
+  .sdai-m-track {
+    height: 6px;
+    background: #E8EEE0;
+    border-radius: 100px;
+    overflow: hidden;
+  }
+
+  .sdai-m-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 100px;
+    transition: width 1.2s ease;
+  }
+
+  .sdai-m-fill.done { background: var(--green-dark); }
+  .sdai-m-fill.active { background: var(--yellow); }
+
+  .sdai-agent-line {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 12px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .sdai-agent-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+    animation: pulse 1.8s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .mockup-act-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--yellow);
+    color: var(--ink);
+    border: none;
+    border-radius: 999px;
+    padding: 8px 15px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-top: 14px;
+    cursor: default;
+  }
+
+  /* ── FEATURES ── */
+  .features-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    margin-bottom: 12px;
+  }
+
+  .features-heading {
+    font-size: clamp(1.7rem, 4vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: var(--ink);
+    margin-bottom: 12px;
+  }
+
+  .features-intro {
+    font-size: 1rem;
+    color: var(--muted);
+    max-width: 520px;
+    margin-bottom: 52px;
+    line-height: 1.65;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+  }
+
+  .f-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 24px;
+  }
+
+  .f-icon {
+    font-size: 1.4rem;
+    margin-bottom: 12px;
+  }
+
+  .f-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .f-desc {
+    font-size: 0.86rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── HOW IT WORKS ── */
+  .how-bg {
+    background: #EFF4E6;
+    border-radius: 20px;
+    padding: clamp(40px, 6vw, 64px) clamp(28px, 5vw, 56px);
+  }
+
+  .how-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    margin-bottom: 12px;
+  }
+
+  .how-heading {
+    font-size: clamp(1.5rem, 3.5vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.6px;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .how-sub {
+    font-size: 0.95rem;
+    color: var(--muted);
+    margin-bottom: 36px;
+    max-width: 480px;
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .sdai-step {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .step-num {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 2px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  .step-text strong {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
     display: block;
-    margin: -1rem -1rem 2.5rem -1rem;
-    padding: 0 0 4px 0;
-  }
-  #sdai-landing * { box-sizing: border-box; }
-  #sdai-landing img, #sdai-landing svg { display: block; max-width: 100%; }
-  #sdai-landing a { color: inherit; text-decoration: none; }
-
-  #sdai-landing h1, #sdai-landing h2, #sdai-landing h3, #sdai-landing .display {
-    font-family: 'Truculenta', sans-serif !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.02em !important;
-    line-height: 1.04 !important;
-    margin: 0 !important;
-    color: var(--sdai-ink) !important;
-  }
-  #sdai-landing p { font-family: 'Inter', sans-serif !important; margin: 0; }
-
-  @media (prefers-reduced-motion: reduce) {
-    #sdai-landing *, #sdai-landing *::before, #sdai-landing *::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
+    margin-bottom: 2px;
   }
 
-  #sdai-landing :focus-visible {
-    outline: 3px solid var(--sdai-orange) !important;
-    outline-offset: 2px;
-    border-radius: 4px;
+  .step-text span {
+    font-size: 0.85rem;
+    color: var(--muted);
   }
 
-  #sdai-landing .sdai-wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
-
-  /* Nav */
-  #sdai-landing .sdai-nav {
-    background: rgba(245, 248, 238, 0.9);
-    border-bottom: 1px solid var(--sdai-line);
+  /* ── AGENT SECTION ── */
+  .agent-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
   }
-  #sdai-landing .sdai-nav-inner {
-    max-width: 1180px; margin: 0 auto; padding: 16px 32px;
-    display: flex; align-items: center; justify-content: space-between;
+
+  .agent-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    margin-bottom: 12px;
   }
-  #sdai-landing .sdai-brand { display: flex; align-items: center; gap: 10px; font-weight: 800 !important; font-size: 1.15rem; font-family: 'Truculenta', sans-serif !important; }
-  #sdai-landing .sdai-brand-mark {
-    width: 34px; height: 34px; border-radius: 9px; background: var(--sdai-ink);
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+
+  .agent-heading {
+    font-size: clamp(1.5rem, 3.5vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.6px;
+    color: var(--ink);
+    margin-bottom: 14px;
   }
-  #sdai-landing .sdai-nav-links { display: flex; gap: 30px; font-size: 0.95rem; color: var(--sdai-muted); }
-  #sdai-landing .sdai-nav-links a:hover { color: var(--sdai-ink); }
-  #sdai-landing .sdai-nav-cta {
-    background: var(--sdai-ink); color: #fff !important; padding: 10px 20px;
-    border-radius: 999px; font-weight: 700 !important; font-size: 0.92rem;
-    display: inline-flex; align-items: center; gap: 6px;
-    transition: background 0.15s, transform 0.15s;
+
+  .agent-body {
+    font-size: 0.95rem;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 20px;
   }
-  #sdai-landing .sdai-nav-cta:hover { background: var(--sdai-green-dark); transform: translateY(-1px); }
 
-  /* Hero */
-  #sdai-landing .sdai-hero { padding: 72px 0 56px; }
-  #sdai-landing .sdai-hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
-  #sdai-landing .sdai-eyebrow {
-    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--sdai-muted); margin-bottom: 18px; display: block;
+  .agent-loop {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  #sdai-landing .sdai-hero h1 { font-size: clamp(2.3rem, 4.4vw, 3.6rem); }
-  #sdai-landing .sdai-hero h1 .sdai-accent { color: var(--sdai-green-dark) !important; }
-  #sdai-landing .sdai-hero p.sdai-lede { font-size: 1.15rem; color: var(--sdai-muted) !important; margin: 20px 0 30px; max-width: 46ch; }
-  #sdai-landing .sdai-cta-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-  #sdai-landing .sdai-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 15px 26px; border-radius: 999px; font-weight: 700 !important; font-size: 1rem;
-    border: none; cursor: pointer; transition: transform 0.15s, background 0.15s, border-color 0.15s;
-    font-family: 'Inter', sans-serif !important;
+
+  .loop-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.86rem;
+    color: var(--ink);
+    font-weight: 500;
   }
-  #sdai-landing .sdai-btn-primary { background: var(--sdai-yellow); color: var(--sdai-ink) !important; }
-  #sdai-landing .sdai-btn-primary:hover { background: var(--sdai-orange); transform: translateY(-1px); }
-  #sdai-landing .sdai-btn-ghost { background: transparent; color: var(--sdai-ink) !important; border: 1.5px solid var(--sdai-line); }
-  #sdai-landing .sdai-btn-ghost:hover { border-color: var(--sdai-green); background: #fff; }
-  #sdai-landing .sdai-hero-note { font-size: 0.85rem; color: var(--sdai-muted) !important; margin-top: 14px; }
 
-  #sdai-landing .sdai-mastery-card {
-    background: var(--sdai-panel); border: 1.5px solid var(--sdai-line); border-radius: 22px;
-    padding: 26px; box-shadow: 0 24px 60px -30px rgba(36, 43, 24, 0.35);
+  .loop-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
   }
-  #sdai-landing .sdai-tag {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--sdai-sidebar); color: var(--sdai-muted) !important; font-size: 0.78rem; font-weight: 700 !important;
-    padding: 5px 12px; border-radius: 999px; margin-bottom: 18px;
+
+  .agent-card {
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 16px;
+    padding: 24px;
   }
-  #sdai-landing .sdai-tag i { color: var(--sdai-green-dark); font-size: 0.9rem; }
-  #sdai-landing .sdai-m-row { margin-bottom: 16px; }
-  #sdai-landing .sdai-m-row:last-child { margin-bottom: 0; }
-  #sdai-landing .sdai-m-label { display: flex; justify-content: space-between; font-size: 0.87rem; font-weight: 600; margin-bottom: 7px; color: var(--sdai-ink) !important; }
-  #sdai-landing .sdai-m-label .sdai-score { color: var(--sdai-muted) !important; font-weight: 500; }
-  #sdai-landing .sdai-m-track { height: 10px; border-radius: 999px; background: var(--sdai-sidebar); overflow: hidden; }
-  #sdai-landing .sdai-m-fill { height: 100%; border-radius: 999px; background: var(--sdai-green); width: 0%; transition: width 1.1s cubic-bezier(.2,.8,.2,1); }
-  #sdai-landing .sdai-m-fill.done { background: var(--sdai-green-dark); }
-  #sdai-landing .sdai-m-fill.active { background: var(--sdai-yellow); }
-  #sdai-landing .sdai-agent-line {
-    margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--sdai-line);
-    display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--sdai-muted) !important;
+
+  .agent-card-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--green-dark);
+    margin-bottom: 16px;
   }
-  #sdai-landing .sdai-agent-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sdai-green-dark); box-shadow: 0 0 0 4px var(--sdai-glow); }
 
-  #sdai-landing section { padding: 72px 0; }
-  #sdai-landing .sdai-section-head { max-width: 640px; margin-bottom: 44px; }
-  #sdai-landing .sdai-section-head .sdai-eyebrow { margin-bottom: 14px; }
-  #sdai-landing .sdai-section-head h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); }
-  #sdai-landing .sdai-section-head p { color: var(--sdai-muted) !important; font-size: 1.05rem; margin-top: 14px; }
-
-  #sdai-landing .sdai-features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-  #sdai-landing .sdai-feature-card { background: var(--sdai-panel); border: 1.5px solid var(--sdai-line); border-radius: 18px; padding: 28px; transition: transform 0.18s, box-shadow 0.18s; }
-  #sdai-landing .sdai-feature-card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgba(36,43,24,0.3); }
-  #sdai-landing .sdai-feature-icon { width: 44px; height: 44px; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
-  #sdai-landing .sdai-feature-icon.i1 { background: #E4EDD1; color: var(--sdai-green-dark); }
-  #sdai-landing .sdai-feature-icon.i2 { background: #FBEBD0; color: var(--sdai-orange); }
-  #sdai-landing .sdai-feature-icon.i3 { background: #DDE6F5; color: #4C6FA6; }
-  #sdai-landing .sdai-feature-card h3 { font-size: 1.12rem; margin-bottom: 8px !important; }
-  #sdai-landing .sdai-feature-card p { color: var(--sdai-muted) !important; font-size: 0.95rem; }
-
-  #sdai-landing .sdai-steps { display: flex; flex-direction: column; }
-  #sdai-landing .sdai-step { display: grid; grid-template-columns: 80px 1fr; gap: 24px; padding: 28px 0; border-top: 1px solid var(--sdai-line); }
-  #sdai-landing .sdai-steps .sdai-step:last-child { border-bottom: 1px solid var(--sdai-line); }
-  #sdai-landing .sdai-step-num { font-family: 'Truculenta', sans-serif !important; font-weight: 800 !important; font-size: 1.5rem; color: var(--sdai-green-dark) !important; opacity: 0.55; }
-  #sdai-landing .sdai-step h3 { font-size: 1.15rem; margin-bottom: 6px !important; }
-  #sdai-landing .sdai-step p { color: var(--sdai-muted) !important; max-width: 60ch; }
-
-  #sdai-landing .sdai-mockup-shell { background: var(--sdai-ink); border-radius: 24px; padding: clamp(18px, 4vw, 40px); color: #fff !important; }
-  #sdai-landing .sdai-mockup-shell .sdai-section-head h2 { color: #fff !important; }
-  #sdai-landing .sdai-mockup-shell .sdai-section-head p { color: rgba(255,255,255,0.72) !important; }
-  #sdai-landing .sdai-mockup-window { background: var(--sdai-bg); border-radius: 16px; overflow: hidden; margin-top: 10px; display: grid; grid-template-columns: 210px 1fr; box-shadow: 0 30px 70px -30px rgba(0,0,0,0.5); }
-  #sdai-landing .sdai-mockup-sidebar { background: var(--sdai-sidebar); padding: 20px 14px; }
-  #sdai-landing .sdai-mockup-nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 9px; font-size: 0.86rem; font-weight: 600; color: var(--sdai-ink) !important; margin-bottom: 4px; }
-  #sdai-landing .sdai-mockup-nav-item.active { background: var(--sdai-yellow); }
-  #sdai-landing .sdai-mockup-nav-item i { font-size: 1rem; color: var(--sdai-muted); }
-  #sdai-landing .sdai-mockup-nav-item.active i { color: var(--sdai-ink); }
-  #sdai-landing .sdai-mockup-main { padding: 24px 26px; }
-  #sdai-landing .sdai-mockup-main h4 { font-family: 'Truculenta', sans-serif !important; font-weight: 800 !important; font-size: 1.3rem; margin: 0 0 4px !important; }
-  #sdai-landing .sdai-mockup-main .sdai-sub { color: var(--sdai-muted) !important; font-size: 0.83rem; margin-bottom: 20px; }
-  #sdai-landing .sdai-mockup-panel { background: #fff; border: 1.5px solid var(--sdai-line); border-radius: 14px; padding: 16px 18px; }
-  #sdai-landing .sdai-mockup-target { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; }
-  #sdai-landing .sdai-mockup-target span { color: var(--sdai-muted) !important; font-weight: 500; }
-  #sdai-landing .sdai-mockup-act-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--sdai-yellow); color: var(--sdai-ink) !important; padding: 8px 15px; border-radius: 999px; font-size: 0.8rem; font-weight: 700 !important; }
-
-  #sdai-landing .sdai-faq-item { border-top: 1px solid var(--sdai-line); }
-  #sdai-landing .sdai-faq-list { border-bottom: 1px solid var(--sdai-line); }
-  #sdai-landing .sdai-faq-q {
-    width: 100%; background: none; border: none; text-align: left; cursor: pointer;
-    padding: 20px 4px; display: flex; align-items: center; justify-content: space-between;
-    font-family: 'Inter', sans-serif !important; font-size: 1.02rem; font-weight: 700 !important; color: var(--sdai-ink) !important;
+  /* ── FAQ ── */
+  .faq-heading {
+    font-size: clamp(1.5rem, 3.5vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.6px;
+    color: var(--ink);
+    margin-bottom: 32px;
   }
-  #sdai-landing .sdai-faq-q i { color: var(--sdai-green-dark); transition: transform 0.2s; flex-shrink: 0; margin-left: 16px; }
-  #sdai-landing .sdai-faq-item[open] .sdai-faq-q i { transform: rotate(180deg); }
-  #sdai-landing .sdai-faq-a { padding: 0 4px 22px; color: var(--sdai-muted) !important; font-size: 0.96rem; max-width: 68ch; }
 
-  #sdai-landing .sdai-cta-band { background: var(--sdai-green); border-radius: 26px; padding: clamp(34px, 5vw, 60px); display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 36px; align-items: center; }
-  #sdai-landing .sdai-cta-band h2 { font-size: clamp(1.7rem, 3.4vw, 2.3rem); color: var(--sdai-ink) !important; }
-  #sdai-landing .sdai-cta-band p { color: #2E3A1E !important; font-size: 1.02rem; margin-top: 12px; max-width: 44ch; }
-  #sdai-landing .sdai-cta-band .sdai-btn-primary { background: var(--sdai-ink); color: #fff !important; }
-  #sdai-landing .sdai-cta-band .sdai-btn-primary:hover { background: #10150A; }
+  .sdai-faq-item {
+    border-top: 1px solid var(--line);
+  }
 
-  #sdai-landing .sdai-footer { padding: 44px 0 8px; border-top: 1px solid var(--sdai-line); }
-  #sdai-landing .sdai-footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; align-items: center; }
-  #sdai-landing .sdai-footer-note { color: var(--sdai-muted) !important; font-size: 0.86rem; max-width: 46ch; }
-  #sdai-landing .sdai-footer-links { display: flex; gap: 20px; font-size: 0.86rem; color: var(--sdai-muted) !important; }
-  #sdai-landing .sdai-footer-links a:hover { color: var(--sdai-ink) !important; }
+  .sdai-faq-list {
+    border-bottom: 1px solid var(--line);
+  }
 
-  #sdai-landing .sdai-reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
-  #sdai-landing .sdai-reveal.in { opacity: 1; transform: translateY(0); }
+  .sdai-faq-q {
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    padding: 20px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--sans);
+    font-size: 0.97rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
 
+  .sdai-faq-q i {
+    color: var(--green-dark);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-left: 16px;
+    font-size: 1.1rem;
+  }
+
+  .sdai-faq-item[open] .sdai-faq-q i {
+    transform: rotate(180deg);
+  }
+
+  .sdai-faq-a {
+    padding: 0 4px 22px;
+    color: var(--muted);
+    font-size: 0.96rem;
+    max-width: 68ch;
+  }
+
+  /* ── CTA BAND ── */
+  .sdai-cta-band {
+    background: var(--green);
+    border-radius: 20px;
+    padding: clamp(34px, 5vw, 60px);
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 36px;
+    align-items: center;
+  }
+
+  .sdai-cta-band h2 {
+    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+    color: var(--ink) !important;
+  }
+
+  .sdai-cta-band p {
+    color: #2E3A1E !important;
+    font-size: 1.02rem;
+    margin-top: 12px;
+    max-width: 44ch;
+  }
+
+  .sdai-cta-band .sdai-btn-primary {
+    background: var(--ink);
+    color: #fff !important;
+  }
+
+  .sdai-cta-band .sdai-btn-primary:hover {
+    background: #10150A;
+  }
+
+  /* ── FOOTER ── */
+  .sdai-footer {
+    padding: 44px 0 8px;
+    border-top: 1px solid var(--line);
+  }
+
+  .sdai-footer-inner {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: center;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 48px;
+  }
+
+  .sdai-footer-note {
+    color: var(--muted) !important;
+    font-size: 0.86rem;
+    max-width: 46ch;
+  }
+
+  .sdai-footer-links {
+    display: flex;
+    gap: 20px;
+    font-size: 0.86rem;
+    color: var(--muted) !important;
+  }
+
+  .sdai-footer-links a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .sdai-footer-links a:hover { color: var(--ink); }
+
+  /* ── SCROLL REVEAL ── */
+  .sdai-reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .sdai-reveal.sdai-reveal-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── RESPONSIVE ── */
   @media (max-width: 900px) {
-    #sdai-landing .sdai-hero-grid { grid-template-columns: 1fr; }
-    #sdai-landing .sdai-features-grid { grid-template-columns: 1fr; }
-    #sdai-landing .sdai-mockup-window { grid-template-columns: 1fr; }
-    #sdai-landing .sdai-mockup-sidebar { display: flex; overflow-x: auto; gap: 6px; padding: 12px; }
-    #sdai-landing .sdai-mockup-nav-item { white-space: nowrap; }
-    #sdai-landing .sdai-cta-band { grid-template-columns: 1fr; }
-    #sdai-landing .sdai-nav-links { display: none; }
+    .sdai-hero-grid { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+    .mockup-grid { grid-template-columns: 1fr; }
+    .mockup-window { grid-template-columns: 1fr; }
+    .sdai-cta-band { grid-template-columns: 1fr; }
+    .agent-grid { grid-template-columns: 1fr; }
   }
+
   @media (max-width: 560px) {
-    #sdai-landing .sdai-wrap { padding: 0 20px; }
-    #sdai-landing .sdai-nav-inner { padding: 14px 20px; }
-    #sdai-landing .sdai-hero { padding: 44px 0 36px; }
-    #sdai-landing section { padding: 48px 0; }
-    #sdai-landing .sdai-step { grid-template-columns: 42px 1fr; gap: 14px; }
+    .sdai-wrap { padding: 0 20px; }
+    .sdai-nav-inner { padding: 14px 20px; }
+    .sdai-hero { padding: 44px 0 36px; }
+    section { padding: 48px 0; }
+    .sdai-step { grid-template-columns: 42px 1fr; gap: 14px; }
   }
 </style>
+</head>
+<body>
 
-<nav class="sdai-nav">
-  <div class="sdai-nav-inner">
-    <a href="#sdai-landing" class="sdai-brand">
-      <span class="sdai-brand-mark" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M4 5.5C4 4.67 4.67 4 5.5 4H11V19H5.5C4.67 19 4 18.33 4 17.5V5.5Z" stroke="#D9A441" stroke-width="1.6" stroke-linejoin="round"/>
-          <path d="M20 5.5C20 4.67 19.33 4 18.5 4H13V19H18.5C19.33 19 20 18.33 20 17.5V5.5Z" stroke="#D9A441" stroke-width="1.6" stroke-linejoin="round"/>
-        </svg>
-      </span>
-      AI Study Buddy
-    </a>
-    <div class="sdai-nav-links">
-      <a href="#sdai-features">Features</a>
-      <a href="#sdai-how">How it works</a>
-      <a href="#sdai-faq">FAQ</a>
-    </div>
-    <a class="sdai-nav-cta" href="#sdai-login">Log in <i class="ti ti-arrow-right"></i></a>
-  </div>
+<!-- ── NAV ── -->
+<nav>
+  <a href="#" class="nav-logo">📚 AI Study Buddy</a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#how-it-works">How it works</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul>
+  <button class="btn-login" onclick="notifyLogin()">Log in →</button>
 </nav>
 
-<header class="sdai-hero">
-  <div class="sdai-wrap sdai-hero-grid">
-    <div>
-      <span class="sdai-eyebrow">Active-recall study workspaces</span>
-      <h1>Study what you<br>actually don't<br>know <span class="sdai-accent">yet.</span></h1>
-      <p class="sdai-lede">
-        Upload your slides, PDFs, or notes. Get study guides grounded only in
-        your material, quiz yourself, and let an agent quietly find your weak
-        spots and keep at them until they're not weak anymore.
-      </p>
-      <div class="sdai-cta-row">
-        <a class="sdai-btn sdai-btn-primary" href="#sdai-login">Start studying free <i class="ti ti-arrow-right"></i></a>
-        <a class="sdai-btn sdai-btn-ghost" href="#sdai-how">See how it works</a>
-      </div>
-      <p class="sdai-hero-note">No credit card. Works with PDF, PPTX, and pasted text.</p>
-    </div>
-
-    <div class="sdai-mastery-card sdai-reveal" id="sdai-mastery-card">
-      <span class="sdai-tag"><i class="ti ti-robot"></i> Agent-picked focus</span>
-      <div class="sdai-m-row">
-        <div class="sdai-m-label"><span>Cellular Respiration</span><span class="sdai-score" data-target="88">0/80</span></div>
-        <div class="sdai-m-track"><div class="sdai-m-fill done" data-width="100"></div></div>
-      </div>
-      <div class="sdai-m-row">
-        <div class="sdai-m-label"><span>Elasticity of Demand</span><span class="sdai-score" data-target="61">0/80</span></div>
-        <div class="sdai-m-track"><div class="sdai-m-fill" data-width="76"></div></div>
-      </div>
-      <div class="sdai-m-row">
-        <div class="sdai-m-label"><span>Class Visibility Modifiers</span><span class="sdai-score" data-target="24">0/80</span></div>
-        <div class="sdai-m-track"><div class="sdai-m-fill active" data-width="30"></div></div>
-      </div>
-      <div class="sdai-agent-line">
-        <span class="sdai-agent-dot" aria-hidden="true"></span>
-        Next up: 8 questions on Visibility Modifiers — chosen automatically.
-      </div>
-    </div>
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-tag">Active-recall study workspaces</div>
+  <h1>Study what you actually<br/>don't know yet.</h1>
+  <p class="hero-sub">
+    Upload your slides, PDFs, or notes. Get study guides grounded only in
+    your material, quiz yourself, and let an agent quietly find your weak
+    spots and keep at them until they're not weak anymore.
+  </p>
+  <div class="hero-ctas">
+    <button class="btn-primary" onclick="notifyLogin()">Start studying free →</button>
+    <a href="#how-it-works" class="btn-ghost">See how it works</a>
   </div>
-</header>
+  <p class="hero-note">No credit card. Works with PDF, PPTX, and pasted text.</p>
 
-<section id="sdai-features">
-  <div class="sdai-wrap">
-    <div class="sdai-section-head sdai-reveal">
-      <span class="sdai-eyebrow">Built from what you upload</span>
-      <h2>Nothing here is generic.</h2>
-      <p>Every guide, explanation, and quiz question is pulled from the material you actually gave it — not a general knowledge dump.</p>
+  <!-- live mockup preview -->
+  <div class="mockup-window sdai-reveal">
+    <div class="mockup-bar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
     </div>
-    <div class="sdai-features-grid">
-      <div class="sdai-feature-card sdai-reveal">
-        <div class="sdai-feature-icon i1"><i class="ti ti-file-text"></i></div>
-        <h3>Grounded in your material</h3>
-        <p>Drop in a PDF, a slide deck, or pasted notes. Guides and quizzes are built strictly from that content — if it's not in your material, it's not in the answer.</p>
+    <div class="mockup-grid">
+      <div class="mockup-sidebar">
+        <div class="mockup-nav-item">⊞ Dashboard</div>
+        <div class="mockup-nav-item">📖 Study guide</div>
+        <div class="mockup-nav-item">◎ Quiz</div>
+        <div class="mockup-nav-item active">◎ Adaptive Study</div>
+        <div class="mockup-nav-item">🔖 Saved Guides</div>
       </div>
-      <div class="sdai-feature-card sdai-reveal">
-        <div class="sdai-feature-icon i2"><i class="ti ti-bulb"></i></div>
-        <h3>Guides that make you work</h3>
-        <p>Every topic gets a concept, a worked example, and a challenge problem with the answer hidden until you're ready to check yourself.</p>
-      </div>
-      <div class="sdai-feature-card sdai-reveal">
-        <div class="sdai-feature-icon i3"><i class="ti ti-target-arrow"></i></div>
-        <h3>An agent that finds the gaps</h3>
-        <p>After a quiz, the agent scores every topic, picks the weakest one on its own, and keeps quizzing you on it — with more questions while there's more ground to cover, fewer as you close in.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="sdai-how">
-  <div class="sdai-wrap">
-    <div class="sdai-section-head sdai-reveal">
-      <span class="sdai-eyebrow">The loop</span>
-      <h2>From upload to mastered — in order.</h2>
-      <p>This is the actual sequence, not a marketing metaphor: each step feeds the next one.</p>
-    </div>
-    <div class="sdai-steps">
-      <div class="sdai-step sdai-reveal">
-        <div class="sdai-step-num">01</div>
-        <div><h3>Upload your material</h3><p>PDF, PPTX, images, or pasted text — indexed into a workspace for that subject.</p></div>
-      </div>
-      <div class="sdai-step sdai-reveal">
-        <div class="sdai-step-num">02</div>
-        <div><h3>Get a study guide, or take a quiz</h3><p>Read a grounded guide with gated challenge questions, or jump straight into a multiple-choice quiz.</p></div>
-      </div>
-      <div class="sdai-step sdai-reveal">
-        <div class="sdai-step-num">03</div>
-        <div><h3>The agent scores every topic</h3><p>Each quiz attempt updates a mastery score per topic — recent performance counts more than an old mistake.</p></div>
-      </div>
-      <div class="sdai-step sdai-reveal">
-        <div class="sdai-step-num">04</div>
-        <div><h3>It picks your next focus — you don't have to</h3><p>The weakest topic gets targeted automatically, with a round sized to how much ground is actually left to cover.</p></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="sdai-product">
-  <div class="sdai-wrap">
-    <div class="sdai-mockup-shell sdai-reveal">
-      <div class="sdai-section-head" style="margin-bottom: 24px;">
-        <span class="sdai-eyebrow" style="color: rgba(255,255,255,0.6) !important;">Inside the workspace</span>
-        <h2>One place, every subject.</h2>
-        <p>Each workspace holds its own material, guides, and quiz history — switch subjects without losing progress on the last one.</p>
-      </div>
-      <div class="sdai-mockup-window">
-        <div class="sdai-mockup-sidebar">
-          <div class="sdai-mockup-nav-item"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
-          <div class="sdai-mockup-nav-item"><i class="ti ti-book"></i> Study guide</div>
-          <div class="sdai-mockup-nav-item"><i class="ti ti-help-circle"></i> Quiz</div>
-          <div class="sdai-mockup-nav-item active"><i class="ti ti-target-arrow"></i> Adaptive Study</div>
-          <div class="sdai-mockup-nav-item"><i class="ti ti-bookmark"></i> Saved Guides</div>
-        </div>
-        <div class="sdai-mockup-main">
-          <h4>🎯 Adaptive Study</h4>
-          <div class="sdai-sub">Biology 201 — Overall: 6/9 topics mastered</div>
-          <div class="sdai-mockup-panel">
-            <div class="sdai-mockup-target">Focus: Cellular Respiration <span>— currently 24/80</span></div>
-            <a class="sdai-mockup-act-btn" href="#sdai-login"><i class="ti ti-player-play"></i> Start round (14 questions)</a>
+      <div class="mockup-main">
+        <div class="sdai-mastery-card">
+          <div class="sdai-tag">⚡ Agent-picked focus</div>
+          <div class="sdai-m-row">
+            <div class="sdai-m-label">
+              <span>Cellular Respiration</span>
+              <span class="sdai-score" data-target="88">0/80</span>
+            </div>
+            <div class="sdai-m-track"><div class="sdai-m-fill done" data-width="100"></div></div>
+          </div>
+          <div class="sdai-m-row">
+            <div class="sdai-m-label">
+              <span>Elasticity of Demand</span>
+              <span class="sdai-score" data-target="61">0/80</span>
+            </div>
+            <div class="sdai-m-track"><div class="sdai-m-fill" data-width="76"></div></div>
+          </div>
+          <div class="sdai-m-row">
+            <div class="sdai-m-label">
+              <span>Class Visibility Modifiers</span>
+              <span class="sdai-score" data-target="24">0/80</span>
+            </div>
+            <div class="sdai-m-track"><div class="sdai-m-fill active" data-width="30"></div></div>
+          </div>
+          <div class="sdai-agent-line">
+            <span class="sdai-agent-dot" aria-hidden="true"></span>
+            Next up: 8 questions on Visibility Modifiers — chosen automatically.
           </div>
         </div>
       </div>
@@ -369,113 +812,277 @@ _LANDING_HTML = r"""
   </div>
 </section>
 
-<section id="sdai-faq">
-  <div class="sdai-wrap">
-    <div class="sdai-section-head sdai-reveal">
-      <span class="sdai-eyebrow">Good questions</span>
-      <h2>A few things you might be wondering.</h2>
+<!-- ── FEATURES ── -->
+<section id="features">
+  <div class="features-label">Built from what you upload</div>
+  <h2 class="features-heading">Nothing here is generic.</h2>
+  <p class="features-intro">
+    Every guide, explanation, and quiz question is pulled from the material
+    you actually gave it — not a general knowledge dump.
+  </p>
+  <div class="features-grid">
+    <div class="f-card sdai-reveal">
+      <div class="f-icon">📄</div>
+      <div class="f-title">Grounded in your material</div>
+      <p class="f-desc">Drop in a PDF, a slide deck, or pasted notes. Guides and quizzes are built strictly from that content — if it's not in your material, it's not in the answer.</p>
     </div>
-    <div class="sdai-faq-list sdai-reveal">
-      <details class="sdai-faq-item" open>
-        <summary class="sdai-faq-q">Can it work with my actual course material?<i class="ti ti-chevron-down"></i></summary>
-        <div class="sdai-faq-a">Yes — upload a syllabus, slides, PDFs, or paste notes directly. Guides, explanations, and quiz questions are built strictly from what you give it, not general knowledge about the subject.</div>
-      </details>
-      <details class="sdai-faq-item">
-        <summary class="sdai-faq-q">Will it just give me answers?<i class="ti ti-chevron-down"></i></summary>
-        <div class="sdai-faq-a">No — every topic includes a challenge problem first, with the worked answer hidden behind a "Reveal Answer" button, so you attempt it before checking yourself.</div>
-      </details>
-      <details class="sdai-faq-item">
-        <summary class="sdai-faq-q">What file types are supported?<i class="ti ti-chevron-down"></i></summary>
-        <div class="sdai-faq-a">PDF, PPTX, JPG, and PNG uploads, plus pasted text. Slide images are analyzed for diagrams and code, not just their text.</div>
-      </details>
-      <details class="sdai-faq-item">
-        <summary class="sdai-faq-q">Is my data private?<i class="ti ti-chevron-down"></i></summary>
-        <div class="sdai-faq-a">Your Gemini API key is stored only in your browser and never touches our servers. Your uploaded material and progress are tied to your account and not shared with other users.</div>
-      </details>
-      <details class="sdai-faq-item">
-        <summary class="sdai-faq-q">Can I use it on my phone?<i class="ti ti-chevron-down"></i></summary>
-        <div class="sdai-faq-a">Yes — it runs in the browser, so it works on any device with no install.</div>
-      </details>
+    <div class="f-card sdai-reveal">
+      <div class="f-icon">💡</div>
+      <div class="f-title">Guides that make you work</div>
+      <p class="f-desc">Every topic gets a concept, a worked example, and a challenge problem with the answer hidden until you're ready to check yourself.</p>
+    </div>
+    <div class="f-card sdai-reveal">
+      <div class="f-icon">◎</div>
+      <div class="f-title">An agent that finds the gaps</div>
+      <p class="f-desc">After a quiz, the agent scores every topic, picks the weakest one on its own, and keeps quizzing you on it — with more questions while there's more ground to cover, fewer as you close in.</p>
     </div>
   </div>
 </section>
 
+<!-- ── HOW IT WORKS ── -->
+<section id="how-it-works">
+  <div class="how-bg sdai-reveal">
+    <div class="how-label">The loop</div>
+    <h2 class="how-heading">From upload to mastered — in order.</h2>
+    <p class="how-sub">This is the actual sequence, not a marketing metaphor: each step feeds the next one.</p>
+    <div class="steps">
+      <div class="sdai-step">
+        <div class="step-num">01</div>
+        <div class="step-text">
+          <strong>Upload your material</strong>
+          <span>PDF, PPTX, images, or pasted text — indexed into a workspace for that subject.</span>
+        </div>
+      </div>
+      <div class="sdai-step">
+        <div class="step-num">02</div>
+        <div class="step-text">
+          <strong>Get a study guide, or take a quiz</strong>
+          <span>Read a grounded guide with gated challenge questions, or jump straight into a multiple-choice quiz.</span>
+        </div>
+      </div>
+      <div class="sdai-step">
+        <div class="step-num">03</div>
+        <div class="step-text">
+          <strong>The agent scores every topic</strong>
+          <span>Each quiz attempt updates a mastery score per topic — recent performance counts more than an old mistake.</span>
+        </div>
+      </div>
+      <div class="sdai-step">
+        <div class="step-num">04</div>
+        <div class="step-text">
+          <strong>It picks your next round automatically</strong>
+          <span>No deciding what to study. The agent surfaces your weakest topic and queues the right number of questions for it.</span>
+        </div>
+      </div>
+      <div class="sdai-step">
+        <div class="step-num">05</div>
+        <div class="step-text">
+          <strong>One place, every subject</strong>
+          <span>Each workspace holds its own material, guides, and quiz history — switch subjects without losing progress on the last one.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── AGENT DEEP DIVE ── -->
 <section>
-  <div class="sdai-wrap">
-    <div class="sdai-cta-band sdai-reveal">
-      <div>
-        <h2>Stop cramming. Start understanding.</h2>
-        <p>Upload your first set of slides and see your first study guide in about two minutes.</p>
+  <div class="agent-grid">
+    <div class="sdai-reveal">
+      <div class="agent-label">How the agent works</div>
+      <h2 class="agent-heading">An agent that finds the gaps.</h2>
+      <p class="agent-body">
+        After every quiz, the agent reads your performance, picks the topic
+        where you're furthest from mastery, and queues a focused round —
+        automatically. You don't choose what to study next. It does.
+      </p>
+      <div class="agent-loop">
+        <div class="loop-item"><div class="loop-dot"></div> Perceive — reads quiz history and scores every topic</div>
+        <div class="loop-item"><div class="loop-dot"></div> Decide — picks the weakest topic without input from you</div>
+        <div class="loop-item"><div class="loop-dot"></div> Act — generates a targeted quiz round for that topic</div>
+        <div class="loop-item"><div class="loop-dot"></div> Adapt — updates the score, adjusts question count, loops</div>
       </div>
-      <div>
-        <a class="sdai-btn sdai-btn-primary" href="#sdai-login">Start studying free <i class="ti ti-arrow-right"></i></a>
+    </div>
+    <div class="agent-card sdai-reveal">
+      <div class="agent-card-tag">⚡ Agent-picked focus · Biology 201</div>
+      <div class="sdai-m-row" style="margin-bottom:12px;">
+        <div class="sdai-m-label"><span>Cellular Respiration</span><span class="sdai-score">88/80 ✓</span></div>
+        <div class="sdai-m-track"><div class="sdai-m-fill done" style="width:100%"></div></div>
       </div>
+      <div class="sdai-m-row" style="margin-bottom:12px;">
+        <div class="sdai-m-label"><span>Elasticity of Demand</span><span class="sdai-score">61/80</span></div>
+        <div class="sdai-m-track"><div class="sdai-m-fill" style="width:76%"></div></div>
+      </div>
+      <div class="sdai-m-row" style="margin-bottom:12px;">
+        <div class="sdai-m-label"><span>Class Visibility Modifiers</span><span class="sdai-score">24/80</span></div>
+        <div class="sdai-m-track"><div class="sdai-m-fill active" style="width:30%"></div></div>
+      </div>
+      <div class="sdai-agent-line">
+        <span class="sdai-agent-dot"></span>
+        Next up: 8 questions on Visibility Modifiers — chosen automatically.
+      </div>
+      <button class="mockup-act-btn">▶ Start round (8 questions)</button>
+      <p style="font-size:0.72rem;color:var(--muted);margin-top:8px;">Good questions</p>
     </div>
   </div>
 </section>
 
-<footer class="sdai-footer">
-  <div class="sdai-wrap sdai-footer-inner">
-    <p class="sdai-footer-note">AI Study Buddy — built for a calmer, more grounded way to study. Still growing; feedback welcome.</p>
-    <div class="sdai-footer-links">
-      <a href="#sdai-features">Features</a>
-      <a href="#sdai-how">How it works</a>
-      <a href="#sdai-faq">FAQ</a>
-      <a href="#sdai-login">Log in</a>
+<!-- ── FAQ ── -->
+<section id="faq">
+  <h2 class="faq-heading">A few things you might be wondering.</h2>
+  <div class="sdai-faq-list">
+    <details class="sdai-faq-item">
+      <summary class="sdai-faq-q">Can it work with my actual course material? <i>▾</i></summary>
+      <p class="sdai-faq-a">Yes — upload a syllabus, slides, PDFs, or paste notes directly. Guides, explanations, and quiz questions are built strictly from what you give it, not general knowledge about the subject.</p>
+    </details>
+    <details class="sdai-faq-item">
+      <summary class="sdai-faq-q">Will it just give me answers? <i>▾</i></summary>
+      <p class="sdai-faq-a">No. Challenge problems in the study guide are hidden until you attempt them. The quiz doesn't show explanations until after you submit. The point is to make you retrieve the answer, not read it.</p>
+    </details>
+    <details class="sdai-faq-item">
+      <summary class="sdai-faq-q">What file types are supported? <i>▾</i></summary>
+      <p class="sdai-faq-a">PDF, PPTX, JPG, and PNG up to 200 MB per file. You can also paste text directly — useful for copying from a textbook or your own notes.</p>
+    </details>
+    <details class="sdai-faq-item">
+      <summary class="sdai-faq-q">Is my data private? <i>▾</i></summary>
+      <p class="sdai-faq-a">Your material and quiz history are stored in a tenant-isolated database — no other user can access your workspaces. Your Gemini API key is stored only in your browser and is never sent to our servers.</p>
+    </details>
+    <details class="sdai-faq-item">
+      <summary class="sdai-faq-q">Can I use it on my phone? <i>▾</i></summary>
+      <p class="sdai-faq-a">Yes — the app is responsive and works in a mobile browser. File upload works best from a desktop, but reviewing guides and taking quizzes works fine on mobile.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ── CTA BAND ── -->
+<section>
+  <div class="sdai-cta-band sdai-reveal">
+    <div>
+      <h2>Stop cramming. Start understanding.</h2>
+      <p>Upload your first set of slides and see your first study guide in about two minutes.</p>
+    </div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="btn-primary sdai-btn-primary" onclick="notifyLogin()" style="background:var(--ink);color:#fff;font-size:1rem;padding:14px 32px;">
+        Start studying free →
+      </button>
     </div>
   </div>
-</footer>
+</section>
+
+<!-- ── FOOTER ── -->
+<div class="sdai-footer">
+  <div class="sdai-footer-inner">
+    <p class="sdai-footer-note">AI Study Buddy — Active-Recall Study Workspaces.<br/>Built by a student, for students.</p>
+    <div class="sdai-footer-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#faq">FAQ</a>
+      <a href="#" onclick="notifyLogin();return false;">Log in</a>
+    </div>
+  </div>
 </div>
 
 <script>
-(function() {
-  var root = document.getElementById('sdai-landing');
-  if (!root || root.dataset.sdaiInit) return;
-  root.dataset.sdaiInit = "1";
-
-  var revealEls = root.querySelectorAll('.sdai-reveal');
-  var io = new IntersectionObserver(function(entries) {
-    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('in'); });
-  }, { threshold: 0.15 });
-  revealEls.forEach(function(el) { io.observe(el); });
-
-  var masteryCard = document.getElementById('sdai-mastery-card');
-  var masteryPlayed = false;
-  if (masteryCard) {
-    var masteryIo = new IntersectionObserver(function(entries) {
-      entries.forEach(function(entry) {
-        if (entry.isIntersecting && !masteryPlayed) {
-          masteryPlayed = true;
-          masteryCard.querySelectorAll('.sdai-m-fill').forEach(function(bar, i) {
-            setTimeout(function() { bar.style.width = bar.dataset.width + '%'; }, 150 + i * 180);
-          });
-          masteryCard.querySelectorAll('.sdai-score').forEach(function(el, i) {
-            var target = parseInt(el.dataset.target, 10);
-            setTimeout(function() { el.textContent = target + '/80'; }, 150 + i * 180);
-          });
-        }
-      });
-    }, { threshold: 0.4 });
-    masteryIo.observe(masteryCard);
+  // ── Notify Streamlit to switch to the login view ──
+  function notifyLogin() {
+    // Streamlit components communicate via window.parent.postMessage
+    window.parent.postMessage({ type: 'sdai_login' }, '*');
   }
 
-  root.querySelectorAll('.sdai-faq-item').forEach(function(item) {
-    item.addEventListener('toggle', function() {
-      if (item.open) {
-        root.querySelectorAll('.sdai-faq-item').forEach(function(other) {
-          if (other !== item) other.open = false;
-        });
-      }
+  // ── Animate mastery bar fills on load ──
+  window.addEventListener('load', function () {
+    document.querySelectorAll('.sdai-m-fill[data-width]').forEach(function (el) {
+      var w = el.getAttribute('data-width');
+      setTimeout(function () { el.style.width = w + '%'; }, 200);
+    });
+
+    // Animate score counters
+    document.querySelectorAll('.sdai-score[data-target]').forEach(function (el) {
+      var target = parseInt(el.getAttribute('data-target'), 10);
+      var start  = 0;
+      var dur    = 1200;
+      var step   = 16;
+      var inc    = target / (dur / step);
+      var iv = setInterval(function () {
+        start = Math.min(start + inc, target);
+        el.textContent = Math.round(start) + '/80';
+        if (start >= target) clearInterval(iv);
+      }, step);
+    });
+
+    // Scroll reveal
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add('sdai-reveal-in');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.sdai-reveal').forEach(function (el) {
+      observer.observe(el);
     });
   });
-})();
+
+  // ── Auto-resize the iframe height so Streamlit shows it fully ──
+  function resizeParent() {
+    var h = document.body.scrollHeight;
+    window.parent.postMessage({ type: 'sdai_height', height: h }, '*');
+  }
+
+  window.addEventListener('load', resizeParent);
+  window.addEventListener('resize', resizeParent);
+  new MutationObserver(resizeParent).observe(document.body, {
+    childList: true, subtree: true, attributes: true
+  });
 </script>
+</body>
+</html>
 """
 
+    # Render inside a real iframe — no Markdown pre-processing
+    components.html(html, height=4200, scrolling=False)
 
-def render_marketing_landing() -> None:
-    """Renders the marketing content above the login form on the
-    unauthenticated screen. CTA links point to #sdai-login, an anchor
-    app.py places directly above the login/signup form, so clicking
-    'Start Free' just scrolls down to it on the same page."""
-    st.markdown(_LANDING_HTML, unsafe_allow_html=True)
+    # ── Listen for messages from the iframe ──
+    # Streamlit doesn't natively relay postMessage, so we use a tiny JS shim
+    # injected into the PARENT page that listens for our custom events and
+    # sets a query param to trigger a rerun.
+    st.markdown("""
+    <script>
+    (function () {
+      if (window._sdaiListenerAttached) return;
+      window._sdaiListenerAttached = true;
+      window.addEventListener('message', function (e) {
+        if (e.data && e.data.type === 'sdai_login') {
+          // Set a flag in sessionStorage so Streamlit can read it on next rerun
+          sessionStorage.setItem('sdai_goto_login', '1');
+          // Force a Streamlit rerun by clicking the hidden rerun button
+          var btn = window.parent.document.querySelector(
+            '[data-testid="stBaseButton-headerNoPadding"]'
+          );
+          if (btn) btn.click();
+        }
+        if (e.data && e.data.type === 'sdai_height') {
+          var iframe = window.document.querySelector(
+            'iframe[title="components.html"]'
+          );
+          if (iframe) iframe.style.height = e.data.height + 'px';
+        }
+      });
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Check if the iframe signalled a login click
+    check_js = """
+    <script>
+    (function () {
+      if (sessionStorage.getItem('sdai_goto_login') === '1') {
+        sessionStorage.removeItem('sdai_goto_login');
+        window.parent.postMessage({ type: 'sdai_login_confirmed' }, '*');
+      }
+    })();
+    </script>
+    """
+    st.markdown(check_js, unsafe_allow_html=True)
