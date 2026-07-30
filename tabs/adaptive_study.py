@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import logging
+import os
 import re
 import time
 
@@ -15,8 +16,81 @@ from utils.metrics import log_metric
 logger = logging.getLogger(__name__)
 
 _PREFIX_RE = re.compile(r'^[A-Da-d]\.\s*')
-
 _DIAGNOSTIC_QUESTIONS = 15
+_FREE_ADAPTIVE_USES   = 2
+
+# ---------------------------------------------------------------------------
+# Shared key (same pattern as study.py / quiz.py)
+# ---------------------------------------------------------------------------
+_SHARED_KEY = os.environ.get("SHARED_GEMINI_KEY", "")
+
+
+def _get_effective_api_key() -> tuple[str, bool]:
+    user_key = st.session_state.get("gemini_api_key", "").strip()
+    if user_key:
+        return user_key, True
+    return _SHARED_KEY, False
+
+
+def _get_adaptive_uses_today(username: str) -> int:
+    """Count how many adaptive rounds (diagnostic + focus) this user ran today."""
+    try:
+        from utils.metrics import get_daily_usage
+        from utils.persistence import SessionLocal, MetricEvent
+        from sqlalchemy import func
+        from datetime import datetime, timezone
+        db = SessionLocal()
+        today = datetime.now(timezone.utc).date()
+        count = db.query(MetricEvent).filter(
+            MetricEvent.username == username,
+            MetricEvent.event_name.in_(["adaptive_diagnostic", "adaptive_focus_round"]),
+            func.date(MetricEvent.created_at) == today,
+        ).count()
+        db.close()
+        return count
+    except Exception:
+        return 0
+
+
+def _adaptive_quota_banner(remaining: int) -> None:
+    if remaining == _FREE_ADAPTIVE_USES:
+        color = "#ABC270"
+        msg   = f"✨ You have {remaining} free adaptive session{'s' if remaining != 1 else ''} today"
+    elif remaining > 0:
+        color = "#D9A441"
+        msg   = f"⚡ {remaining} of {_FREE_ADAPTIVE_USES} free adaptive sessions left today"
+    else:
+        color = "#C0392B"
+        msg   = "🔒 Daily adaptive limit reached"
+    st.markdown(
+        f"<div style='display:inline-block;background:{color}22;border:1.5px solid {color};"
+        f"border-radius:999px;padding:4px 14px;font-size:0.82rem;font-weight:600;"
+        f"color:{color};margin-bottom:0.75rem;font-family:Truculenta,sans-serif;'>"
+        f"{msg}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _adaptive_limit_reached_ui() -> None:
+    st.markdown(
+        f"""
+        <div style="background:#FFF8F8;border:2px solid #C0392B;border-radius:14px;
+                    padding:1.25rem 1.5rem;margin-bottom:1rem;">
+          <strong style="color:#C0392B;font-family:'Truculenta',sans-serif;font-size:1rem;">
+            🔒 You've used your {_FREE_ADAPTIVE_USES} free adaptive sessions for today
+          </strong>
+          <p style="color:#5C6A48;font-family:'Truculenta',sans-serif;font-size:0.9rem;
+                    margin:0.5rem 0 0;">
+            Come back tomorrow — or paste your own free Gemini API key in
+            <strong>Settings</strong> to run unlimited adaptive study sessions.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Go to Settings →", type="primary", key="quota_settings_adaptive"):
+        st.session_state["current_page"] = "Settings"
+        st.rerun()
 
 
 def _keys(wid: str) -> dict:
@@ -38,10 +112,10 @@ def _init_state(k: dict) -> None:
 
 
 def _clear_round(k: dict) -> None:
-    st.session_state[k["quiz"]] = []
-    st.session_state[k["answers"]] = {}
+    st.session_state[k["quiz"]]      = []
+    st.session_state[k["answers"]]   = {}
     st.session_state[k["submitted"]] = False
-    st.session_state[k["target"]] = None
+    st.session_state[k["target"]]    = None
 
 
 def _render_progress_overview(mastery: dict, weak_topics: list, mastered_topics: list) -> None:
@@ -51,7 +125,6 @@ def _render_progress_overview(mastery: dict, weak_topics: list, mastered_topics:
     overall = len(mastered_topics) / total
     st.markdown(f"**Overall progress: {len(mastered_topics)}/{total} topics mastered**")
     st.progress(overall)
-
     with st.expander("Per-topic breakdown", expanded=False):
         for topic in sorted(mastery, key=lambda t: mastery[t].score):
             m = mastery[topic]
@@ -71,12 +144,9 @@ def _grade_and_store(workspace: dict, k: dict, quiz: list, topic: str) -> dict:
         else:
             missed.append(q)
     score = round((correct / len(quiz)) * 100) if quiz else 0
-
     workspace.setdefault("quiz_history", []).append({
-        "score": score,
-        "questions": quiz,
-        "answers": dict(answers),
-        "missed_questions": missed,
+        "score": score, "questions": quiz,
+        "answers": dict(answers), "missed_questions": missed,
     })
     st.session_state["is_dirty"] = True
     log_metric("adaptive_round_submitted", {
@@ -86,8 +156,9 @@ def _grade_and_store(workspace: dict, k: dict, quiz: list, topic: str) -> dict:
 
 
 def render_adaptive_study_tab(api_key: str, subject: str, workspace: dict) -> None:
-    wid = workspace.get("id", subject)
-    k = _keys(wid)
+    wid      = workspace.get("id", subject)
+    k        = _keys(wid)
+    username = st.session_state.get("username", "anonymous")
     _init_state(k)
 
     st.markdown("### 🎯 Adaptive Study")
@@ -95,33 +166,45 @@ def render_adaptive_study_tab(api_key: str, subject: str, workspace: dict) -> No
     if not workspace.get("files"):
         st.warning("Add material in the Ingest Material tab first.")
         return
-    if not api_key:
-        st.warning("⚙ Enter your Gemini API key in Settings first.")
+
+    # ── Resolve key & quota ─────────────────────────────────────────────────
+    effective_key, using_own_key = _get_effective_api_key()
+
+    if not using_own_key:
+        uses_today = _get_adaptive_uses_today(username)
+        remaining  = max(0, _FREE_ADAPTIVE_USES - uses_today)
+        _adaptive_quota_banner(remaining)
+        adaptive_blocked = remaining <= 0 and not effective_key
+    else:
+        remaining        = _FREE_ADAPTIVE_USES  # unlimited on own key
+        adaptive_blocked = False
+
+    # If there's an active round in progress, render it regardless of quota
+    # (they already paid the quota cost when they started it)
+    active_quiz = st.session_state[k["quiz"]]
+    if active_quiz:
+        _render_active_round(effective_key, subject, workspace, k)
         return
 
     quiz_history = workspace.get("quiz_history", [])
-    active_quiz = st.session_state[k["quiz"]]
 
-    # ── Active round in progress: render it and stop ───────────────────────
-    if active_quiz:
-        _render_active_round(api_key, subject, workspace, k)
-        return
-
-    # ── No history yet: need the baseline diagnostic first ─────────────────
+    # ── No history yet: diagnostic ──────────────────────────────────────────
     if not quiz_history:
         st.caption(
             "This material hasn't been assessed yet. Run a quick diagnostic covering "
             "all its topics so the agent knows where to start."
         )
-        if st.button("▶ Start Diagnostic Quiz", type="primary"):
-            _start_diagnostic(api_key, subject, workspace, k)
+        if adaptive_blocked:
+            _adaptive_limit_reached_ui()
+        elif st.button("▶ Start Diagnostic Quiz", type="primary"):
+            _start_diagnostic(effective_key, subject, workspace, k)
         return
 
     # ── Have history: perceive + score + decide ─────────────────────────────
-    mastery = compute_mastery(quiz_history)
-    target = decide_next_target(mastery)
+    mastery        = compute_mastery(quiz_history)
+    target         = decide_next_target(mastery)
     mastered_topics = [t for t, m in mastery.items() if m.score >= MASTERY_THRESHOLD]
-    weak_topics = [t for t, m in mastery.items() if m.score < MASTERY_THRESHOLD]
+    weak_topics    = [t for t, m in mastery.items() if m.score < MASTERY_THRESHOLD]
 
     _render_progress_overview(mastery, weak_topics, mastered_topics)
     st.divider()
@@ -137,10 +220,13 @@ def render_adaptive_study_tab(api_key: str, subject: str, workspace: dict) -> No
     n_questions = dynamic_question_count(target.score)
     st.info(
         f"**Focus: {target.topic}** — currently {target.score:.0f}/{MASTERY_THRESHOLD:.0f}. "
-        f"Next round: **{n_questions} question(s)** (more questions while there's more ground to cover)."
+        f"Next round: **{n_questions} question(s)**."
     )
-    if st.button(f"▶ Start round on \"{target.topic}\"", type="primary"):
-        _start_focus_round(api_key, subject, workspace, k, target.topic, n_questions)
+
+    if adaptive_blocked:
+        _adaptive_limit_reached_ui()
+    elif st.button(f"▶ Start round on \"{target.topic}\"", type="primary"):
+        _start_focus_round(effective_key, subject, workspace, k, target.topic, n_questions)
 
 
 def _start_diagnostic(api_key: str, subject: str, workspace: dict, k: dict) -> None:
@@ -160,11 +246,11 @@ def _start_diagnostic(api_key: str, subject: str, workspace: dict, k: dict) -> N
             st.error(describe_gemini_error(exc))
             return
 
-    st.session_state[k["quiz"]] = questions
-    st.session_state[k["answers"]] = {}
+    st.session_state[k["quiz"]]      = questions
+    st.session_state[k["answers"]]   = {}
     st.session_state[k["submitted"]] = False
-    st.session_state[k["target"]] = None  # None marks this as the diagnostic round
-    st.session_state[k["attempt"]] += 1
+    st.session_state[k["target"]]    = None
+    st.session_state[k["attempt"]]  += 1
     st.rerun()
 
 
@@ -180,9 +266,6 @@ def _start_focus_round(api_key: str, subject: str, workspace: dict, k: dict, top
                 username=username,
             )
             questions = parse_json_response(response_text).get("questions", [])[:n_questions]
-            # Force the exact topic label regardless of what the model returns —
-            # otherwise this attempt could get bucketed under a different topic
-            # string and the agent's own progress bar for `topic` would never move.
             for q in questions:
                 q["topic"] = topic
         except Exception as exc:
@@ -190,18 +273,18 @@ def _start_focus_round(api_key: str, subject: str, workspace: dict, k: dict, top
             st.error(describe_gemini_error(exc))
             return
 
-    st.session_state[k["quiz"]] = questions
-    st.session_state[k["answers"]] = {}
+    st.session_state[k["quiz"]]      = questions
+    st.session_state[k["answers"]]   = {}
     st.session_state[k["submitted"]] = False
-    st.session_state[k["target"]] = topic
-    st.session_state[k["attempt"]] += 1
+    st.session_state[k["target"]]    = topic
+    st.session_state[k["attempt"]]  += 1
     st.rerun()
 
 
 def _render_active_round(api_key: str, subject: str, workspace: dict, k: dict) -> None:
-    quiz = st.session_state[k["quiz"]]
-    topic = st.session_state[k["target"]]
-    submitted = st.session_state[k["submitted"]]
+    quiz       = st.session_state[k["quiz"]]
+    topic      = st.session_state[k["target"]]
+    submitted  = st.session_state[k["submitted"]]
     attempt_no = st.session_state[k["attempt"]]
 
     header = "Diagnostic Quiz" if topic is None else f"Focus Round — {topic}"
@@ -216,9 +299,9 @@ def _render_active_round(api_key: str, subject: str, workspace: dict, k: dict) -
             continue
 
         if submitted:
-            user_idx = st.session_state[k["answers"]].get(str(index))
+            user_idx    = st.session_state[k["answers"]].get(str(index))
             correct_idx = question.get("answer_index", 0)
-            is_correct = user_idx == correct_idx
+            is_correct  = user_idx == correct_idx
             for ci, choice in enumerate(choices):
                 marker = "✅" if ci == correct_idx else ("❌" if ci == user_idx else "⬜")
                 st.markdown(f"{marker}&ensp;{_PREFIX_RE.sub('', choice)}")
@@ -229,8 +312,9 @@ def _render_active_round(api_key: str, subject: str, workspace: dict, k: dict) -
         else:
             display_choices = [f"{chr(65 + i)}. {_PREFIX_RE.sub('', c)}" for i, c in enumerate(choices)]
             radio_key = f"adaptive_q_{k['quiz']}_{index}_attempt_{attempt_no}"
-            selected = st.radio(
-                "Choose one", display_choices, index=None, key=radio_key, label_visibility="collapsed",
+            selected  = st.radio(
+                "Choose one", display_choices, index=None,
+                key=radio_key, label_visibility="collapsed",
             )
             if selected is not None:
                 idx = next((i for i, d in enumerate(display_choices) if d == selected), None)
@@ -246,16 +330,13 @@ def _render_active_round(api_key: str, subject: str, workspace: dict, k: dict) -
                 return
 
             if topic is None:
-                # Diagnostic: just record it, no single-topic grading needed —
-                # compute_mastery() will bucket every question by its own topic.
                 answers = st.session_state[k["answers"]]
-                correct = sum(
-                    1 for i, q in enumerate(quiz) if answers.get(str(i)) == q.get("answer_index")
-                )
-                score = round((correct / len(quiz)) * 100) if quiz else 0
-                missed = [q for i, q in enumerate(quiz) if answers.get(str(i)) != q.get("answer_index")]
+                correct = sum(1 for i, q in enumerate(quiz) if answers.get(str(i)) == q.get("answer_index"))
+                score   = round((correct / len(quiz)) * 100) if quiz else 0
+                missed  = [q for i, q in enumerate(quiz) if answers.get(str(i)) != q.get("answer_index")]
                 workspace.setdefault("quiz_history", []).append({
-                    "score": score, "questions": quiz, "answers": dict(answers), "missed_questions": missed,
+                    "score": score, "questions": quiz,
+                    "answers": dict(answers), "missed_questions": missed,
                 })
                 st.session_state["is_dirty"] = True
                 log_metric("adaptive_diagnostic_submitted", {"score": score, "question_count": len(quiz)})
