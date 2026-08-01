@@ -203,8 +203,6 @@ def render_quiz_tab(api_key_unused: str, subject: str, workspace: dict) -> None:
     effective_key, using_own_key = _get_effective_api_key()
     username = st.session_state.get("username", "anonymous")
 
-    render_agent_panel(effective_key, subject, workspace)
-
     # ── Quota gate ─────────────────────────────────────────────────────────
     if not using_own_key:
         usage = get_daily_usage(username)
