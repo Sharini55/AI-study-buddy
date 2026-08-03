@@ -1429,35 +1429,44 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-        if (not st.session_state.get("gemini_api_key")
-                and not st.session_state.get("_api_key_banner_dismissed")):
-            st.markdown(
-                """
-                <div style="border:2px solid #D9A441;border-radius:14px;
-                            padding:1rem 1.25rem;background:#FFFBEF;margin-bottom:1rem;">
-                  <strong style="color:#242B18;font-family:'Truculenta',sans-serif;">
-                    🔑 Gemini API Key required
-                  </strong>
-                  <p style="color:#5C6A48;font-family:'Truculenta',sans-serif;
-                            font-size:0.9rem;margin:0.4rem 0 0;">
-                    AI Study Buddy uses Google's Gemini to generate study guides and quizzes.
-                    Your key is <strong>stored only in this browser</strong> — never on our servers.
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank"
-                       style="color:#8BA552;">Get a free key →</a>
-                  </p>
-                </div>
-                """,
-                unsafe_allow_html=True,
+        # Banner only shows when user has NO own key AND has exhausted free quota
+        _has_own_key = bool(st.session_state.get("gemini_api_key", "").strip())
+        if not _has_own_key and not st.session_state.get("_api_key_banner_dismissed"):
+            from utils.metrics import get_daily_usage
+            _username = st.session_state.get("username", "anonymous")
+            _usage    = get_daily_usage(_username)
+            _exhausted = (
+                _usage["guides_remaining"] <= 0
+                or _usage["quizzes_remaining"] <= 0
             )
-            b1, b2 = st.columns([2, 5])
-            with b1:
-                if st.button("Go to Settings", type="primary"):
-                    st.session_state["current_page"] = "Settings"
-                    st.rerun()
-            with b2:
-                if st.button("Dismiss"):
-                    st.session_state["_api_key_banner_dismissed"] = True
-                    st.rerun()
+            if _exhausted:
+                st.markdown(
+                    """
+                    <div style="border:2px solid #D9A441;border-radius:14px;
+                                padding:1rem 1.25rem;background:#FFFBEF;margin-bottom:1rem;">
+                      <strong style="color:#242B18;font-family:'Truculenta',sans-serif;">
+                        🔑 You've used your free generations for today
+                      </strong>
+                      <p style="color:#5C6A48;font-family:'Truculenta',sans-serif;
+                                font-size:0.9rem;margin:0.4rem 0 0;">
+                        You've hit your daily free limit. Add your own free Gemini API key
+                        to keep going — stored only in your browser, never on our servers.
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                           style="color:#8BA552;">Get a free key in 2 minutes →</a>
+                      </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                b1, b2 = st.columns([2, 5])
+                with b1:
+                    if st.button("Add my key", type="primary"):
+                        st.session_state["current_page"] = "Settings"
+                        st.rerun()
+                with b2:
+                    if st.button("Dismiss"):
+                        st.session_state["_api_key_banner_dismissed"] = True
+                        st.rerun()
 
         st.divider()
         if current_page == "Study guide":
