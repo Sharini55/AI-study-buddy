@@ -1,4 +1,60 @@
-# ── Paste this block at the BOTTOM of utils/metrics.py ──────────────────────
+import logging
+import streamlit as st
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Helper functions & fallbacks
+# ---------------------------------------------------------------------------
+
+def _current_username() -> str:
+    """Safely retrieve the current logged-in username from Streamlit session state."""
+    if hasattr(st, "session_state"):
+        return (
+            st.session_state.get("username")
+            or st.session_state.get("user")
+            or "guest"
+        )
+    return "guest"
+
+
+def _count_tokens(text: str) -> int:
+    """Rough estimation of token count (~4 chars per token)."""
+    if not text:
+        return 0
+    return len(text) // 4
+
+
+def _estimate_cost(input_tokens: int, output_tokens: int) -> float:
+    """Rough cost estimation in USD based on standard LLM pricing."""
+    input_cost = (input_tokens / 1_000_000) * 0.15
+    output_cost = (output_tokens / 1_000_000) * 0.60
+    return round(input_cost + output_cost, 6)
+
+
+def _write_event(username: str, event_name: str, subject: str, properties: dict) -> None:
+    """Write metric event to database with safety fallback."""
+    try:
+        from utils.persistence import SessionLocal, MetricEvent
+        db = SessionLocal()
+        try:
+            event = MetricEvent(
+                username=username,
+                event_name=event_name,
+                subject=subject,
+                properties=properties
+            )
+            db.add(event)
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.debug(f"Failed to record metric event {event_name}", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Daily Usage & Rate Limits
+# ---------------------------------------------------------------------------
 
 DAILY_GUIDE_LIMIT = 3
 DAILY_QUIZ_LIMIT  = 2
@@ -11,18 +67,18 @@ def get_daily_usage(username: str) -> dict:
 
     Returns:
         {
-            "guides_used":     int,   # generations today
-            "quizzes_used":    int,
+            "guides_used":      int,  # generations today
+            "quizzes_used":     int,
             "guides_remaining": int,
             "quizzes_remaining": int,
-            "guide_limit":     int,
-            "quiz_limit":      int,
+            "guide_limit":      int,
+            "quiz_limit":       int,
         }
     Falls back to zeroes if the DB is unreachable so the app never crashes.
     """
     try:
         from utils.persistence import SessionLocal, MetricEvent
-        import datetime, sqlalchemy as sa
+        import datetime
 
         today_start = datetime.datetime.utcnow().replace(
             hour=0, minute=0, second=0, microsecond=0
@@ -61,14 +117,16 @@ def get_daily_usage(username: str) -> dict:
             "guide_limit": DAILY_GUIDE_LIMIT,
             "quiz_limit": DAILY_QUIZ_LIMIT,
         }
-        # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
 # Backward-compat aliases — quiz.py and study.py import these by name
 # ---------------------------------------------------------------------------
 
 def log_metric(event: str, data: dict, username: str | None = None) -> None:
     """Generic event logger. Aliases to _write_event for backward compat."""
     u = username or _current_username()
-    subject = data.pop("subject", "")
+    subject = data.pop("subject", "") if isinstance(data, dict) else ""
     _write_event(u, event, subject, data)
 
 
@@ -83,7 +141,7 @@ def report_generation_metrics(label: str, subject: str, mode: str,
     props = {
         "label":         label,
         "mode":          mode,
-        "elapsed_s":     round(elapsed_s, 2),
+        "elapsed_s":      round(elapsed_s, 2),
         "input_tokens":  input_tokens,
         "output_tokens": output_tokens,
         "cost_usd":      cost,
@@ -95,9 +153,9 @@ def report_generation_metrics(label: str, subject: str, mode: str,
 
 
 def report_parse_metrics(file_name: str, file_type: str, file_size_kb: float,
-                          pages_or_slides: int, raw_chars: int, cleaned_chars: int,
-                          images_found: int, parse_time_s: float,
-                          username: str | None = None) -> None:
+                         pages_or_slides: int, raw_chars: int, cleaned_chars: int,
+                         images_found: int, parse_time_s: float,
+                         username: str | None = None) -> None:
     u = username or _current_username()
     completeness = round(cleaned_chars / raw_chars * 100, 1) if raw_chars else 0
     density      = round(cleaned_chars / max(pages_or_slides, 1))
