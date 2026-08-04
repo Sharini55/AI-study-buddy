@@ -1265,7 +1265,11 @@ def render_guide_viewer(guide: dict) -> None:
 
 def render_admin_dashboard(current_user: str) -> None:
     from tabs.db_inspector import render_db_inspector_tab
-    from utils.auth import admin_reset_password
+    try:
+        from utils.auth import admin_reset_password
+        _has_reset = True
+    except ImportError:
+        _has_reset = False
 
     _db_check = SessionLocal()
     try:
@@ -1286,28 +1290,31 @@ def render_admin_dashboard(current_user: str) -> None:
     st.caption(f"Logged in as **{current_user}**")
 
     # ── Password Reset Tool ─────────────────────────────────────────────────
-    with st.expander("🔑 Reset a User's Password", expanded=False):
-        st.caption("Use this to help a user who is locked out of their account.")
-        with st.form("admin_reset_pw_form"):
-            reset_username = st.text_input("Username to reset")
-            new_pw         = st.text_input(
-                "New temporary password",
-                type="password",
-                placeholder="Min 8 chars · 1 number · 1 special character"
-            )
-            confirm_pw = st.text_input("Confirm new password", type="password")
-            submitted  = st.form_submit_button("Reset Password", type="primary")
-            if submitted:
-                if not reset_username or not new_pw or not confirm_pw:
-                    st.error("Fill in all three fields.")
-                elif new_pw != confirm_pw:
-                    st.error("Passwords do not match.")
-                else:
-                    ok, msg = admin_reset_password(reset_username.strip(), new_pw)
-                    if ok:
-                        st.success(f"✅ {msg} — tell the user their temporary password and ask them to change it in Settings.")
+    if not _has_reset:
+        st.warning("⚠️ admin_reset_password not found in utils/auth.py — add the function and redeploy.")
+    else:
+        with st.expander("🔑 Reset a User's Password", expanded=False):
+            st.caption("Use this to help a user who is locked out of their account.")
+            with st.form("admin_reset_pw_form"):
+                reset_username = st.text_input("Username to reset")
+                new_pw         = st.text_input(
+                    "New temporary password",
+                    type="password",
+                    placeholder="Min 8 chars · 1 number · 1 special character"
+                )
+                confirm_pw = st.text_input("Confirm new password", type="password")
+                submitted  = st.form_submit_button("Reset Password", type="primary")
+                if submitted:
+                    if not reset_username or not new_pw or not confirm_pw:
+                        st.error("Fill in all three fields.")
+                    elif new_pw != confirm_pw:
+                        st.error("Passwords do not match.")
                     else:
-                        st.error(f"❌ {msg}")
+                        ok, msg = admin_reset_password(reset_username.strip(), new_pw)
+                        if ok:
+                            st.success(f"✅ {msg} — tell the user their temporary password and ask them to change it in Settings.")
+                        else:
+                            st.error(f"❌ {msg}")
 
     render_db_inspector_tab()
 
