@@ -307,7 +307,7 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        [data-testid="stFileUploaderDropzone"] button {
+        [data-testid="stFileUploaderDropzone"] > div > button {
             position:      relative !important;
             background:    var(--yellow) !important;
             border:        none !important;
@@ -317,10 +317,10 @@ def apply_theme() -> None:
             min-height:    36px !important;
             cursor:        pointer !important;
         }
-        [data-testid="stFileUploaderDropzone"] button span,
-        [data-testid="stFileUploaderDropzone"] button p,
-        [data-testid="stFileUploaderDropzone"] button div,
-        [data-testid="stFileUploaderDropzone"] button svg {
+        [data-testid="stFileUploaderDropzone"] > div > button span,
+        [data-testid="stFileUploaderDropzone"] > div > button p,
+        [data-testid="stFileUploaderDropzone"] > div > button div,
+        [data-testid="stFileUploaderDropzone"] > div > button svg {
             font-size: 0 !important;
             color:     transparent !important;
             fill:      transparent !important;
@@ -329,7 +329,7 @@ def apply_theme() -> None:
             overflow:  hidden !important;
             display:   inline-block !important;
         }
-        [data-testid="stFileUploaderDropzone"] button::after {
+        [data-testid="stFileUploaderDropzone"] > div > button::after {
             content:      "Upload" !important;
             position:     absolute !important;
             inset:        0 !important;
