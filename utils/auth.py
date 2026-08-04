@@ -65,7 +65,24 @@ def register_user(username_input: str, password_input: str) -> tuple[bool, str]:
     finally:
         db.close()
 
-
+def admin_reset_password(username: str, new_password: str) -> tuple[bool, str]:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username.lower()).first()
+        if not user:
+            return False, f"User '{username}' not found."
+        ok, msg = _validate_password(new_password)
+        if not ok:
+            return False, msg
+        user.password_hash = hash_password(new_password)
+        db.commit()
+        return True, f"Password reset for '{username}'."
+    except Exception as e:
+        db.rollback()
+        return False, str(e)
+    finally:
+        db.close()
+        
 def login_user(username_input: str, password_input: str) -> tuple[bool, str]:
     username = username_input.strip().lower()
     password = password_input.strip()
