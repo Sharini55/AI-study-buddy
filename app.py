@@ -1289,10 +1289,7 @@ def render_admin_dashboard(current_user: str) -> None:
     st.title("🛠 Admin Dashboard")
     st.caption(f"Logged in as **{current_user}**")
 
-    # ── Password Reset Tool ─────────────────────────────────────────────────
-    if not _has_reset:
-        st.warning("⚠️ admin_reset_password not found in utils/auth.py — add the function and redeploy.")
-    else:
+    if _has_reset:
         with st.expander("🔑 Reset a User's Password", expanded=False):
             st.caption("Use this to help a user who is locked out of their account.")
             with st.form("admin_reset_pw_form"):
@@ -1464,13 +1461,16 @@ def main() -> None:
         # Banner only shows when user has NO own key AND has exhausted free quota
         _has_own_key = bool(st.session_state.get("gemini_api_key", "").strip())
         if not _has_own_key and not st.session_state.get("_api_key_banner_dismissed"):
-            from utils.metrics import get_daily_usage
-            _username = st.session_state.get("username", "anonymous")
-            _usage    = get_daily_usage(_username)
-            _exhausted = (
-                _usage["guides_remaining"] <= 0
-                or _usage["quizzes_remaining"] <= 0
-            )
+            try:
+                from utils.metrics import get_daily_usage
+                _username = st.session_state.get("username", "anonymous")
+                _usage    = get_daily_usage(_username)
+                _exhausted = (
+                    _usage.get("guides_remaining", 1) <= 0
+                    or _usage.get("quizzes_remaining", 1) <= 0
+                )
+            except Exception:
+                _exhausted = False
             if _exhausted:
                 st.markdown(
                     """
