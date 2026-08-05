@@ -307,7 +307,7 @@ def apply_theme() -> None:
         [data-testid="stFileUploaderDropzoneInstructions"] p,
         [data-testid="stFileUploader"] small { color: var(--muted) !important; }
 
-        [data-testid="stFileUploaderDropzone"] button {
+        [data-testid="stFileUploaderDropzone"] > div > button {
             position:      relative !important;
             background:    var(--yellow) !important;
             border:        none !important;
@@ -317,10 +317,10 @@ def apply_theme() -> None:
             min-height:    36px !important;
             cursor:        pointer !important;
         }
-        [data-testid="stFileUploaderDropzone"] button span,
-        [data-testid="stFileUploaderDropzone"] button p,
-        [data-testid="stFileUploaderDropzone"] button div,
-        [data-testid="stFileUploaderDropzone"] button svg {
+        [data-testid="stFileUploaderDropzone"] > div > button span,
+        [data-testid="stFileUploaderDropzone"] > div > button p,
+        [data-testid="stFileUploaderDropzone"] > div > button div,
+        [data-testid="stFileUploaderDropzone"] > div > button svg {
             font-size: 0 !important;
             color:     transparent !important;
             fill:      transparent !important;
@@ -329,7 +329,7 @@ def apply_theme() -> None:
             overflow:  hidden !important;
             display:   inline-block !important;
         }
-        [data-testid="stFileUploaderDropzone"] button::after {
+        [data-testid="stFileUploaderDropzone"] > div > button::after {
             content:      "Upload" !important;
             position:     absolute !important;
             inset:        0 !important;
@@ -1265,6 +1265,11 @@ def render_guide_viewer(guide: dict) -> None:
 
 def render_admin_dashboard(current_user: str) -> None:
     from tabs.db_inspector import render_db_inspector_tab
+    try:
+        from utils.auth import admin_reset_password
+        _has_reset = True
+    except ImportError:
+        _has_reset = False
 
     _db_check = SessionLocal()
     try:
@@ -1283,6 +1288,33 @@ def render_admin_dashboard(current_user: str) -> None:
 
     st.title("🛠 Admin Dashboard")
     st.caption(f"Logged in as **{current_user}**")
+
+    # ── Password Reset Tool ─────────────────────────────────────────────────
+    if not _has_reset:
+        st.warning("⚠️ admin_reset_password not found in utils/auth.py — add the function and redeploy.")
+    else:
+        with st.expander("🔑 Reset a User's Password", expanded=False):
+            st.caption("Use this to help a user who is locked out of their account.")
+            with st.form("admin_reset_pw_form"):
+                reset_username = st.text_input("Username to reset")
+                new_pw         = st.text_input(
+                    "New temporary password",
+                    type="password",
+                    placeholder="Min 8 chars · 1 number · 1 special character"
+                )
+                confirm_pw = st.text_input("Confirm new password", type="password")
+                submitted  = st.form_submit_button("Reset Password", type="primary")
+                if submitted:
+                    if not reset_username or not new_pw or not confirm_pw:
+                        st.error("Fill in all three fields.")
+                    elif new_pw != confirm_pw:
+                        st.error("Passwords do not match.")
+                    else:
+                        ok, msg = admin_reset_password(reset_username.strip(), new_pw)
+                        if ok:
+                            st.success(f"✅ {msg} — tell the user their temporary password and ask them to change it in Settings.")
+                        else:
+                            st.error(f"❌ {msg}")
 
     render_db_inspector_tab()
 
