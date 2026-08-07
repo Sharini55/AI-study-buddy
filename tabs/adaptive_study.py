@@ -174,7 +174,7 @@ def render_adaptive_study_tab(api_key: str, subject: str, workspace: dict) -> No
         uses_today = _get_adaptive_uses_today(username)
         remaining  = max(0, _FREE_ADAPTIVE_USES - uses_today)
         _adaptive_quota_banner(remaining)
-        adaptive_blocked = remaining <= 0 and not effective_key
+        adaptive_blocked = remaining <= 0
     else:
         remaining        = _FREE_ADAPTIVE_USES  # unlimited on own key
         adaptive_blocked = False
