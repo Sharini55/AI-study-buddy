@@ -1,3 +1,4 @@
+import json
 import logging
 import streamlit as st
 
@@ -33,7 +34,17 @@ def _estimate_cost(input_tokens: int, output_tokens: int) -> float:
 
 
 def _write_event(username: str, event_name: str, subject: str, properties: dict) -> None:
-    """Write metric event to database with safety fallback."""
+    """Write metric event to database with safety fallback.
+
+    NOTE: `MetricEvent.properties` is a Text column — it stores a JSON
+    *string*, not a Python dict. Passing the raw dict straight to the
+    DB driver fails on commit (Postgres/psycopg2 can't adapt a dict to
+    a text column), which was silently swallowed by the except clause
+    below and previously logged only at debug level. That meant every
+    metric event — including the ones the daily usage counters rely on
+    — was failing to write, so usage always looked like "0 used" no
+    matter how many generations actually happened.
+    """
     try:
         from utils.persistence import SessionLocal, MetricEvent
         db = SessionLocal()
@@ -42,14 +53,16 @@ def _write_event(username: str, event_name: str, subject: str, properties: dict)
                 username=username,
                 event_name=event_name,
                 subject=subject,
-                properties=properties
+                properties=json.dumps(properties) if properties else None,
             )
             db.add(event)
             db.commit()
         finally:
             db.close()
     except Exception:
-        logger.debug(f"Failed to record metric event {event_name}", exc_info=True)
+        # Bumped from debug -> error so future write failures actually
+        # show up in logs instead of disappearing silently.
+        logger.error(f"Failed to record metric event {event_name}", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +122,7 @@ def get_daily_usage(username: str) -> dict:
             "quiz_limit":       DAILY_QUIZ_LIMIT,
         }
     except Exception:
-        logger.debug("get_daily_usage failed (non-fatal)", exc_info=True)
+        logger.error("get_daily_usage failed (non-fatal)", exc_info=True)
         return {
             "guides_used": 0, "quizzes_used": 0,
             "guides_remaining": DAILY_GUIDE_LIMIT,
