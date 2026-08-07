@@ -207,7 +207,7 @@ def render_quiz_tab(api_key_unused: str, subject: str, workspace: dict) -> None:
     if not using_own_key:
         usage = get_daily_usage(username)
         _quota_banner(usage)
-        quiz_blocked = usage["quizzes_remaining"] <= 0 and not effective_key
+        quiz_blocked = usage["quizzes_remaining"] <= 0
     else:
         usage = None
         quiz_blocked = False
@@ -242,6 +242,7 @@ def render_quiz_tab(api_key_unused: str, subject: str, workspace: dict) -> None:
                         label="Quiz Generation", subject=subject, mode="N/A",
                         prompt_text=_qprompt, output_text=response_text, elapsed_s=ttv,
                     )
+                    st.rerun()
                 except Exception as exc:
                     logger.error("Quiz generation failed: %s", exc, exc_info=True)
                     st.error(describe_gemini_error(exc))
