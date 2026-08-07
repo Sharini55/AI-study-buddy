@@ -154,7 +154,7 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
     if not using_own_key:
         usage = get_daily_usage(username)
         _quota_banner(usage, "guide")
-        guide_blocked = usage["guides_remaining"] <= 0 and not effective_key
+        guide_blocked = usage["guides_remaining"] <= 0
     else:
         usage = None
         guide_blocked = False
@@ -173,6 +173,7 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
                 workspace["generated_notes"] = output
                 st.session_state["is_dirty"] = True
                 _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
+                st.rerun()
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
                 st.error(describe_gemini_error(exc))
