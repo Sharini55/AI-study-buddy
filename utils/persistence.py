@@ -28,11 +28,17 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-    username      = Column(String, primary_key=True)
-    password_hash = Column(String, nullable=False)
-    created_at    = Column(DateTime, default=datetime.utcnow)
-    is_admin      = Column(Boolean, default=False, nullable=False)
-    workspaces    = relationship("Workspace", back_populates="user", cascade="all, delete-orphan")
+    username        = Column(String, primary_key=True)
+    password_hash   = Column(String, nullable=False)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    is_admin        = Column(Boolean, default=False, nullable=False)
+    # Rolling personalization preferences, set from GuideFeedback submissions.
+    # -1 = "less" (too detailed / too many examples), 0 = "just right", 1 = "more".
+    # Each new feedback submission overwrites these rather than accumulating,
+    # so preference can't drift to an extreme from repeated feedback.
+    pref_verbosity  = Column(Integer, default=0, nullable=False)
+    pref_examples   = Column(Integer, default=0, nullable=False)
+    workspaces      = relationship("Workspace", back_populates="user", cascade="all, delete-orphan")
 
 
 class Workspace(Base):
@@ -103,6 +109,21 @@ class MetricEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class GuideFeedback(Base):
+    """
+    One row per (user, guide) feedback submission. Used both as the log of
+    what people said, and as the gate that stops the feedback banner from
+    re-appearing on a guide the user already responded to (or skipped).
+    """
+    __tablename__ = "guide_feedback"
+    id         = Column(String,   primary_key=True, default=lambda: str(uuid.uuid4()))
+    username   = Column(String,   nullable=False, index=True)
+    guide_hash = Column(String,   nullable=False, index=True)
+    verbosity  = Column(Integer,  nullable=False)  # -1 / 0 / 1
+    examples   = Column(Integer,  nullable=False)  # -1 / 0 / 1
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # Create tables (safe on existing DBs)
 Base.metadata.create_all(bind=engine)
 
@@ -121,6 +142,14 @@ def _ensure_columns() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL"))
             else:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE NOT NULL"))
+            conn.commit()
+
+        if "pref_verbosity" not in users_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN pref_verbosity INTEGER DEFAULT 0 NOT NULL"))
+            conn.commit()
+
+        if "pref_examples" not in users_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN pref_examples INTEGER DEFAULT 0 NOT NULL"))
             conn.commit()
 
         if "guide_hash" not in guides_cols:
@@ -193,3 +222,61 @@ def load_local_image_bytes(storage_path: str) -> bytes:
         with open(storage_path, "rb") as f:
             return f.read()
     return b""
+
+
+# ---------------------------------------------------------------------------
+# Study guide feedback / personalization
+# ---------------------------------------------------------------------------
+
+def has_given_feedback(username: str, guide_hash: str) -> bool:
+    """Whether this user already submitted (or skipped) feedback for this guide."""
+    db = SessionLocal()
+    try:
+        return db.query(GuideFeedback).filter(
+            GuideFeedback.username   == username,
+            GuideFeedback.guide_hash == guide_hash,
+        ).first() is not None
+    finally:
+        db.close()
+
+
+def save_guide_feedback(username: str, guide_hash: str, verbosity: int, examples: int) -> None:
+    """
+    Records this guide's feedback and rolls it into the user's running
+    preference (last feedback wins — no accumulation/drift).
+    """
+    db = SessionLocal()
+    try:
+        existing = db.query(GuideFeedback).filter(
+            GuideFeedback.username   == username,
+            GuideFeedback.guide_hash == guide_hash,
+        ).first()
+        if existing:
+            existing.verbosity = verbosity
+            existing.examples  = examples
+        else:
+            db.add(GuideFeedback(
+                username=username, guide_hash=guide_hash,
+                verbosity=verbosity, examples=examples,
+            ))
+
+        user = db.query(User).filter(User.username == username).first()
+        if user:
+            user.pref_verbosity = verbosity
+            user.pref_examples  = examples
+
+        db.commit()
+    finally:
+        db.close()
+
+
+def get_user_preferences(username: str) -> dict:
+    """Returns {'verbosity': -1|0|1, 'examples': -1|0|1}. Defaults to 0/0 (no preference yet)."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return {"verbosity": 0, "examples": 0}
+        return {"verbosity": user.pref_verbosity, "examples": user.pref_examples}
+    finally:
+        db.close()
