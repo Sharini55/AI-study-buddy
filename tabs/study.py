@@ -142,6 +142,66 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
     return result_holder["output"]
 
 
+def _render_feedback_banner(username: str, guide_hash: str) -> None:
+    """
+    Quick two-question feedback banner shown once per generated guide.
+    Feeds straight into utils.persistence.save_guide_feedback, which rolls
+    it into the user's rolling preference (read by gemini.py on their next
+    generation) and is also the gate that stops this from re-appearing on
+    a guide the user already responded to or skipped.
+    """
+    from utils.persistence import has_given_feedback, save_guide_feedback
+    from utils.metrics import log_metric
+
+    dismiss_key = f"_fb_dismissed_{guide_hash}"
+    if st.session_state.get(dismiss_key):
+        return
+    if has_given_feedback(username, guide_hash):
+        return
+
+    st.markdown(
+        """
+        <div style="background:#FFFBEF;border:1.5px solid #D9A441;border-radius:16px;
+                    padding:1.1rem 1.5rem 0.3rem;margin-top:1rem;">
+          <strong style="color:#242B18;font-family:'Truculenta',sans-serif;font-size:0.95rem;">
+            💬 Quick feedback — helps us tailor your next guide
+          </strong>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form(key=f"_fb_form_{guide_hash}"):
+        verbosity = st.radio(
+            "How detailed was this guide?",
+            options=[-1, 0, 1],
+            format_func=lambda x: {-1: "Too detailed", 0: "Just right", 1: "Not detailed enough"}[x],
+            index=1, horizontal=True, key=f"_fb_verbosity_{guide_hash}",
+        )
+        examples = st.radio(
+            "How many examples did it include?",
+            options=[-1, 0, 1],
+            format_func=lambda x: {-1: "Too many", 0: "Just right", 1: "Too few"}[x],
+            index=1, horizontal=True, key=f"_fb_examples_{guide_hash}",
+        )
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            submitted = st.form_submit_button("Submit", type="primary")
+        with c2:
+            skipped = st.form_submit_button("Skip")
+
+    if submitted:
+        save_guide_feedback(username, guide_hash, verbosity, examples)
+        log_metric("guide_feedback_submitted", {
+            "guide_hash": guide_hash, "verbosity": verbosity, "examples": examples,
+        }, username=username)
+        st.session_state[dismiss_key] = True
+        st.rerun()
+    elif skipped:
+        st.session_state[dismiss_key] = True
+        st.rerun()
+
+
 def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: str) -> None:
     """api_key_unused kept for signature compatibility — we resolve the key here."""
     from utils.metrics import get_daily_usage
@@ -154,7 +214,7 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
     if not using_own_key:
         usage = get_daily_usage(username)
         _quota_banner(usage, "guide")
-        guide_blocked = usage["guides_remaining"] <= 0
+        guide_blocked = usage["guides_remaining"] <= 0 and not effective_key
     else:
         usage = None
         guide_blocked = False
@@ -173,7 +233,6 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
                 workspace["generated_notes"] = output
                 st.session_state["is_dirty"] = True
                 _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
-                st.rerun()
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
                 st.error(describe_gemini_error(exc))
@@ -195,6 +254,7 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
         )
         render_guide(workspace["generated_notes"])
         st.markdown("</div>", unsafe_allow_html=True)
+        _render_feedback_banner(username, guide_hash)
     else:
         st.markdown(
             "<div style='background:#FFFFFF;border:1.5px solid #C5D99A;border-radius:18px;"
