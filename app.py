@@ -414,6 +414,18 @@ def apply_theme() -> None:
         [data-testid="stForm"] [data-testid="stWidgetLabel"] label {
             color: var(--ink) !important;
         }
+        /* Individual radio/checkbox option text (e.g. "Too detailed", "Just
+           right") is a separate element from the question's stWidgetLabel
+           above — without this it inherits Streamlit's default text color,
+           which is invisible against the white form background. */
+        [data-testid="stForm"] [data-testid="stRadio"] label,
+        [data-testid="stForm"] [data-testid="stRadio"] label p,
+        [data-testid="stForm"] [data-testid="stRadio"] label span,
+        [data-testid="stForm"] [data-testid="stCheckbox"] label,
+        [data-testid="stForm"] [data-testid="stCheckbox"] label p,
+        [data-testid="stForm"] [data-testid="stCheckbox"] label span {
+            color: var(--ink) !important;
+        }
         [data-testid="stForm"] [data-testid="stBaseButton-primaryFormSubmit"],
         [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"] {
             background: var(--green) !important;
@@ -432,6 +444,28 @@ def apply_theme() -> None:
         [data-testid="stForm"] [data-testid="baseButton-primaryFormSubmit"]:hover {
             background: var(--green-dark) !important;
             border-color: var(--green-dark) !important;
+        }
+        /* The non-primary form submit button (e.g. "Skip") had no rule at
+           all, so it fell back to Streamlit's default dark button with dark
+           text — invisible against itself. */
+        [data-testid="stForm"] [data-testid="stBaseButton-secondaryFormSubmit"],
+        [data-testid="stForm"] [data-testid="baseButton-secondaryFormSubmit"] {
+            background: #FFFFFF !important;
+            border: 1.5px solid var(--line) !important;
+            color: var(--ink) !important;
+            border-radius: 999px !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stForm"] [data-testid="stBaseButton-secondaryFormSubmit"] p,
+        [data-testid="stForm"] [data-testid="stBaseButton-secondaryFormSubmit"] span,
+        [data-testid="stForm"] [data-testid="baseButton-secondaryFormSubmit"] p,
+        [data-testid="stForm"] [data-testid="baseButton-secondaryFormSubmit"] span {
+            color: var(--ink) !important;
+        }
+        [data-testid="stForm"] [data-testid="stBaseButton-secondaryFormSubmit"]:hover,
+        [data-testid="stForm"] [data-testid="baseButton-secondaryFormSubmit"]:hover {
+            background: #E8F0D5 !important;
+            border-color: var(--green) !important;
         }
 
         [data-testid="stMetricLabel"],
