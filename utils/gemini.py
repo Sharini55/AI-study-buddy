@@ -63,6 +63,50 @@ def resolve_model(api_key: str) -> str:
     return GEMINI_MODEL  # last resort; describe_gemini_error() explains if this 404s too
 
 
+def _preference_instructions(prefs: dict) -> str:
+    """
+    Turn a user's stored personalization preferences (rolled up from their
+    feedback on past guides) into a natural-language instruction block
+    prepended to generation prompts. Returns "" when the user has no
+    preference set yet (both values default to 0).
+    """
+    if not prefs:
+        return ""
+    lines = []
+
+    verbosity = prefs.get("verbosity", 0)
+    if verbosity == -1:
+        lines.append(
+            "This reader has told us past guides were too detailed/verbose. "
+            "Be noticeably more concise: shorter explanations, less restating "
+            "of background context, get to the point."
+        )
+    elif verbosity == 1:
+        lines.append(
+            "This reader has told us past guides were not detailed enough. "
+            "Go deeper on each topic with more thorough explanations and context."
+        )
+
+    examples = prefs.get("examples", 0)
+    if examples == -1:
+        lines.append(
+            "This reader found the number of examples excessive. Include "
+            "noticeably fewer worked examples — at most one per key idea."
+        )
+    elif examples == 1:
+        lines.append(
+            "This reader wants more worked examples. Include additional "
+            "practice examples per concept where it aids understanding."
+        )
+
+    if not lines:
+        return ""
+    return (
+        "PERSONALIZATION FOR THIS READER (apply throughout, based on their "
+        "feedback on past guides):\n- " + "\n- ".join(lines)
+    )
+
+
 def describe_gemini_error(exc: Exception) -> str:
     """
     Turn a raw Gemini/genai exception into a specific, actionable message
@@ -205,6 +249,7 @@ def generate_study_guide_sot(
     """
     from utils.guide import skeleton_prompt, section_prompt
     from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
+    from utils.persistence import get_user_preferences
 
     client = get_gemini_client(api_key)
     model = resolve_model(api_key)
@@ -212,8 +257,13 @@ def generate_study_guide_sot(
     total_input_tokens = 0
     total_output_tokens = 0
 
+    prefs = get_user_preferences(username) if username else {}
+    pref_note = _preference_instructions(prefs)
+
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
+    if pref_note:
+        skel_text = f"{pref_note}\n\n{skel_text}"
     skeleton_raw = _gemini_generate(client, [skel_text], model)
     topics = _parse_skeleton(skeleton_raw)
     total_input_tokens += _count_tokens(skel_text)
@@ -231,6 +281,8 @@ def generate_study_guide_sot(
 
     def _write_section(idx: int, topic: str) -> tuple[int, str, int, int]:
         prompt_text = _safe_str(section_prompt(topic, subject, workspace, mode))
+        if pref_note:
+            prompt_text = f"{pref_note}\n\n{prompt_text}"
         try:
             text = _gemini_generate(client, [prompt_text], model)
             return idx, text, _count_tokens(prompt_text), _count_tokens(text)
