@@ -134,11 +134,11 @@ def section_prompt(topic: str, subject: str, workspace: dict, mode: str) -> str:
     ).strip()
 
 
-def quiz_prompt(subject: str, workspace: dict) -> str:
+def quiz_prompt(subject: str, workspace: dict, num_questions: int = 5) -> str:
     return dedent(
         f"""
         You are an expert quiz writer.
-        Generate exactly 5 multiple-choice questions using ONLY the workspace materials below.
+        Generate exactly {num_questions} multiple-choice questions using ONLY the workspace materials below.
         Base every question strictly on content present in the materials.
 
         Return strict JSON only. No Markdown fences.
