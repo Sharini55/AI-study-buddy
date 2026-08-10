@@ -707,6 +707,30 @@ def apply_theme() -> None:
             background: rgba(139, 165, 82, 0.15) !important;
         }
 
+        /* ── Radio option labels — force dark text on all backgrounds ────────
+           Streamlit renders quiz/form radio options as <label><span>text</span>
+           inside a [data-baseweb="radio"] container. The global span colour
+           rules above don't reach them consistently across Streamlit versions,
+           leaving the text white/invisible against the light page background.
+           These rules are scoped as tightly as possible so they don't affect
+           the radio dot itself (handled by the [data-baseweb="radio"] rules
+           above) — only the visible label text. ── */
+        [data-testid="stRadio"] label,
+        [data-testid="stRadio"] label span,
+        [data-testid="stRadio"] label p,
+        [data-testid="stRadio"] div[role="radiogroup"] label,
+        [data-testid="stRadio"] div[role="radiogroup"] label span,
+        [data-testid="stRadio"] div[role="radiogroup"] p,
+        div[data-baseweb="radiogroup"] label,
+        div[data-baseweb="radiogroup"] label span,
+        div[data-baseweb="radiogroup"] label p,
+        div[data-baseweb="radiogroup"] div[role="radio"] ~ div,
+        div[data-baseweb="radiogroup"] div[role="radio"] ~ div span,
+        div[data-baseweb="radiogroup"] div[role="radio"] ~ div p {
+            color: var(--ink) !important;
+            opacity: 1 !important;
+        }
+
         </style>
         <script>
         (function() {
