@@ -22,6 +22,75 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _SHARED_KEY = os.environ.get("SHARED_GEMINI_KEY", "")
 
+# ---------------------------------------------------------------------------
+# Question count selection
+# ---------------------------------------------------------------------------
+QUESTION_COUNT_OPTIONS = [5, 10, 15, 20]
+_DEFAULT_QUESTION_COUNT = 5
+
+
+def _max_supported_questions(workspace: dict) -> int:
+    """
+    Rough content-length heuristic for how many quiz questions the uploaded
+    material can reasonably support without questions repeating or the
+    model stretching thin/fabricating. Uses workspace['processed_text'],
+    the same field every prompt in utils.guide actually sends to Gemini.
+
+    ~4 chars/token is the same rule of thumb utils.metrics._count_tokens
+    uses elsewhere in this app. Thresholds below are a starting heuristic,
+    not derived from testing — tune once you see how real material sizes
+    map to question quality.
+    """
+    text = workspace.get("processed_text") or ""
+    tokens = len(text) // 4
+    if tokens < 400:
+        return 5
+    if tokens < 1000:
+        return 10
+    if tokens < 2000:
+        return 15
+    return QUESTION_COUNT_OPTIONS[-1]
+
+
+def _render_question_count_selector(wid: str, workspace: dict) -> int:
+    """Renders the 5/10/15/20 picker, greying out counts the material can't
+    support, and returns the currently selected (and clamped) count."""
+    count_key = f"_quiz_count_{wid}"
+    max_supported = _max_supported_questions(workspace)
+
+    st.session_state.setdefault(count_key, _DEFAULT_QUESTION_COUNT)
+    if st.session_state[count_key] > max_supported:
+        st.session_state[count_key] = max_supported
+
+    st.markdown(
+        "<p style='font-weight:600;color:#242B18;font-family:Truculenta,sans-serif;"
+        "margin-bottom:4px;'>Number of questions</p>",
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(len(QUESTION_COUNT_OPTIONS))
+    for i, n in enumerate(QUESTION_COUNT_OPTIONS):
+        with cols[i]:
+            is_selected = st.session_state[count_key] == n
+            is_disabled = n > max_supported
+            if st.button(
+                str(n),
+                key=f"_qcount_{wid}_{n}",
+                type="primary" if is_selected else "secondary",
+                use_container_width=True,
+                disabled=is_disabled,
+            ):
+                st.session_state[count_key] = n
+                st.rerun()
+
+    if max_supported < QUESTION_COUNT_OPTIONS[-1]:
+        st.caption(
+            f"📄 Your uploaded material looks fairly short — {max_supported} "
+            f"question{'s' if max_supported != 1 else ''} is the most we'd recommend "
+            f"right now. Add more material to unlock higher counts."
+        )
+
+    return st.session_state[count_key]
+
 
 def _get_effective_api_key() -> tuple[str, bool]:
     user_key = st.session_state.get("gemini_api_key", "").strip()
@@ -69,14 +138,6 @@ def _limit_reached_ui() -> None:
         st.session_state["current_page"] = "Settings"
         st.rerun()
 
-
-# ---------------------------------------------------------------------------
-# Everything below is identical to the original quiz.py
-# The only changes are:
-#   1. _get_effective_api_key() replaces the bare api_key parameter checks
-#   2. Quota gate wraps the "Generate Quiz" button
-#   3. render_quiz_tab signature keeps api_key for compatibility but ignores it
-# ---------------------------------------------------------------------------
 
 def _missed_questions_for_topic(quiz_history: list[dict], topic: str) -> list[dict]:
     found = [
@@ -203,6 +264,9 @@ def render_quiz_tab(api_key_unused: str, subject: str, workspace: dict) -> None:
     effective_key, using_own_key = _get_effective_api_key()
     username = st.session_state.get("username", "anonymous")
 
+    # ── Question count picker ────────────────────────────────────────────────
+    selected_count = _render_question_count_selector(wid, workspace)
+
     # ── Quota gate ─────────────────────────────────────────────────────────
     if not using_own_key:
         usage = get_daily_usage(username)
@@ -221,17 +285,17 @@ def render_quiz_tab(api_key_unused: str, subject: str, workspace: dict) -> None:
         elif not workspace["files"]:
             st.warning("Add material in the Ingest Material tab first.")
         else:
-            with st.spinner("Generating quiz..."):
+            with st.spinner(f"Generating {selected_count}-question quiz..."):
                 try:
                     t_start = time.perf_counter()
-                    _qprompt = quiz_prompt(subject, workspace)
+                    _qprompt = quiz_prompt(subject, workspace, num_questions=selected_count)
                     response_text = call_gemini(
                         effective_key, _qprompt, workspace,
                         metric_label="quiz_generation",
                     )
                     ttv = round(time.perf_counter() - t_start, 2)
 
-                    st.session_state[quiz_key] = parse_json_response(response_text).get("questions", [])[:5]
+                    st.session_state[quiz_key] = parse_json_response(response_text).get("questions", [])[:selected_count]
                     st.session_state[answer_key] = {}
                     st.session_state[submitted_key] = False
                     st.session_state[post_quiz_key] = None
