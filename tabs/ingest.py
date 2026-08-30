@@ -23,7 +23,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
             help="Accepted: PDF, PPTX, JPG, PNG · 200 MB per file",
         )
 
-        # ── Show uploaded filenames clearly so users know files were received ──
+        # Show filenames immediately after selection so users know files landed
         if uploaded_files:
             st.markdown(
                 "<div style='margin-top:8px;'>"
@@ -51,7 +51,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     with col_index:
         if st.button("Index Materials", type="primary", use_container_width=True):
             from utils.analytics import capture
-            username  = st.session_state.get("username", "anonymous")
+            username   = st.session_state.get("username", "anonymous")
             prev_count = len(workspace.get("files", []))
             index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
             new_files = workspace.get("files", [])[prev_count:]
@@ -70,16 +70,42 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                     "size_bytes": len(pasted_text.encode("utf-8")),
                 })
 
-            # ── Guide user to next step after indexing ──
+            # ── Next-step guidance with navigation buttons ──────────────────
             if workspace.get("files"):
-                st.success(
-                    "Materials indexed! Head to **Study Guide** or **Quiz** in the sidebar to get started."
-                )
+                st.success("Materials indexed! What would you like to do next?")
+                btn1, btn2, btn3 = st.columns(3)
+                with btn1:
+                    if st.button(
+                        "📖 Study Guide",
+                        use_container_width=True,
+                        type="primary",
+                        key="ingest_goto_guide",
+                    ):
+                        st.session_state["current_page"] = "Study guide"
+                        st.rerun()
+                with btn2:
+                    if st.button(
+                        "❓ Take a Quiz",
+                        use_container_width=True,
+                        type="primary",
+                        key="ingest_goto_quiz",
+                    ):
+                        st.session_state["current_page"] = "Quiz"
+                        st.rerun()
+                with btn3:
+                    if st.button(
+                        "🎯 Adaptive Study",
+                        use_container_width=True,
+                        key="ingest_goto_adaptive",
+                    ):
+                        st.session_state["current_page"] = "Adaptive Study"
+                        st.rerun()
 
     with col_reset:
         if st.button("🗑 Reset Workspace", use_container_width=True):
             st.session_state[f"_confirm_reset_{subject}"] = True
 
+    # Two-step confirmation so a misclick doesn't nuke everything
     if st.session_state.get(f"_confirm_reset_{subject}"):
         st.warning(
             f"This will clear all indexed files, the study guide, and quiz history "
@@ -87,8 +113,12 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         )
         yes_col, no_col = st.columns(2)
         with yes_col:
-            if st.button("Yes, reset everything", type="primary",
-                         use_container_width=True, key=f"confirm_yes_{subject}"):
+            if st.button(
+                "Yes, reset everything",
+                type="primary",
+                use_container_width=True,
+                key=f"confirm_yes_{subject}",
+            ):
                 fresh = blank_workspace()
                 fresh["id"] = workspace.get("id", fresh["id"])
                 workspace.clear()
@@ -97,8 +127,11 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 st.toast(f"Workspace '{subject}' has been reset.", icon="🗑")
                 st.rerun()
         with no_col:
-            if st.button("Cancel", use_container_width=True,
-                         key=f"confirm_no_{subject}"):
+            if st.button(
+                "Cancel",
+                use_container_width=True,
+                key=f"confirm_no_{subject}",
+            ):
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
                 st.rerun()
 
