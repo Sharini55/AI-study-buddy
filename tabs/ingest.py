@@ -70,40 +70,57 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                     "size_bytes": len(pasted_text.encode("utf-8")),
                 })
 
-            # ── Next-step guidance with navigation buttons ──────────────────
+            # Just set a flag here — don't render the nav buttons inside this
+            # block. st.button() only returns True on the single rerun where
+            # it was clicked, so on the rerun triggered by clicking one of the
+            # nav buttons below, THIS "Index Materials" button is False again
+            # and this whole block (including the nav buttons' own click
+            # handling) would never execute. The flag survives reruns; the
+            # button click doesn't.
             if workspace.get("files"):
-                st.success("Materials indexed! What would you like to do next?")
-                btn1, btn2, btn3 = st.columns(3)
-                with btn1:
-                    if st.button(
-                        "📖 Study Guide",
-                        use_container_width=True,
-                        type="primary",
-                        key="ingest_goto_guide",
-                    ):
-                        st.session_state["current_page"] = "Study guide"
-                        st.rerun()
-                with btn2:
-                    if st.button(
-                        "❓ Take a Quiz",
-                        use_container_width=True,
-                        type="primary",
-                        key="ingest_goto_quiz",
-                    ):
-                        st.session_state["current_page"] = "Quiz"
-                        st.rerun()
-                with btn3:
-                    if st.button(
-                        "🎯 Adaptive Study",
-                        use_container_width=True,
-                        key="ingest_goto_adaptive",
-                    ):
-                        st.session_state["current_page"] = "Adaptive Study"
-                        st.rerun()
+                st.session_state[f"_just_indexed_{subject}"] = True
 
     with col_reset:
         if st.button("🗑 Reset Workspace", use_container_width=True):
             st.session_state[f"_confirm_reset_{subject}"] = True
+            st.session_state[f"_just_indexed_{subject}"] = False
+
+    # ── Next-step guidance with navigation buttons ──────────────────────────
+    # Lives OUTSIDE the "Index Materials" button's if-block on purpose (see
+    # comment above) so each nav button's own click can actually be handled
+    # on the rerun it triggers, instead of the whole section just disappearing.
+    if st.session_state.get(f"_just_indexed_{subject}"):
+        st.success("Materials indexed! What would you like to do next?")
+        btn1, btn2, btn3 = st.columns(3)
+        with btn1:
+            if st.button(
+                "📖 Study Guide",
+                use_container_width=True,
+                type="primary",
+                key="ingest_goto_guide",
+            ):
+                st.session_state["current_page"] = "Study guide"
+                st.session_state[f"_just_indexed_{subject}"] = False
+                st.rerun()
+        with btn2:
+            if st.button(
+                "❓ Take a Quiz",
+                use_container_width=True,
+                type="primary",
+                key="ingest_goto_quiz",
+            ):
+                st.session_state["current_page"] = "Quiz"
+                st.session_state[f"_just_indexed_{subject}"] = False
+                st.rerun()
+        with btn3:
+            if st.button(
+                "🎯 Adaptive Study",
+                use_container_width=True,
+                key="ingest_goto_adaptive",
+            ):
+                st.session_state["current_page"] = "Adaptive Study"
+                st.session_state[f"_just_indexed_{subject}"] = False
+                st.rerun()
 
     # Two-step confirmation so a misclick doesn't nuke everything
     if st.session_state.get(f"_confirm_reset_{subject}"):
@@ -124,6 +141,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 workspace.clear()
                 workspace.update(fresh)
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
+                st.session_state[f"_just_indexed_{subject}"] = False
                 st.toast(f"Workspace '{subject}' has been reset.", icon="🗑")
                 st.rerun()
         with no_col:
