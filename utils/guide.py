@@ -31,7 +31,10 @@ def guide_prompt(subject: str, workspace: dict, mode: str, has_images: bool = Fa
             **SOLVED EXAMPLE**: A complete step-by-step worked solution that shows exactly
             how to apply the concept. Annotate each step.
             **CHALLENGE**: A new unseen problem the student must attempt on their own
-            before seeing the answer. State the problem clearly. Do NOT include the answer here.
+            before seeing the answer. State the problem clearly, then give exactly four
+            answer options labeled A) B) C) D) on their own lines, then a final line
+            "Correct: X" where X is the correct letter. Do NOT explain or justify the
+            answer here — that belongs in [ANSWER].
             **[ANSWER]**: The full solution to the Challenge, with step-by-step reasoning.
         """).strip()
     else:
@@ -45,7 +48,9 @@ def guide_prompt(subject: str, workspace: dict, mode: str, has_images: bool = Fa
             ## [Topic Name]
             **THE RULE**: One-line definition or core rule.
             **THE GUIDED SOLVE**: Key formula or worked micro-example.
-            **THE CHALLENGE**: One exam-style question.
+            **THE CHALLENGE**: One exam-style question, then exactly four answer options
+            labeled A) B) C) D) on their own lines, then a final line "Correct: X" where
+            X is the correct letter. Do NOT explain or justify the answer here.
             **[ANSWER]**: Direct answer with one-line justification.
         """).strip()
 
@@ -101,7 +106,10 @@ def section_prompt(topic: str, subject: str, workspace: dict, mode: str) -> str:
             **SOLVED EXAMPLE**: A complete step-by-step worked solution that shows exactly
             how to apply the concept. Annotate each step.
             **CHALLENGE**: A new unseen problem the student must attempt on their own
-            before seeing the answer. State the problem clearly. Do NOT include the answer here.
+            before seeing the answer. State the problem clearly, then give exactly four
+            answer options labeled A) B) C) D) on their own lines, then a final line
+            "Correct: X" where X is the correct letter. Do NOT explain or justify the
+            answer here — that belongs in [ANSWER].
             **[ANSWER]**: The full solution to the Challenge, with step-by-step reasoning.
         """).strip()
     else:
@@ -110,7 +118,9 @@ def section_prompt(topic: str, subject: str, workspace: dict, mode: str) -> str:
             ## {topic}
             **THE RULE**: One-line definition or core rule.
             **THE GUIDED SOLVE**: Key formula or worked micro-example.
-            **THE CHALLENGE**: One exam-style question.
+            **THE CHALLENGE**: One exam-style question, then exactly four answer options
+            labeled A) B) C) D) on their own lines, then a final line "Correct: X" where
+            X is the correct letter. Do NOT explain or justify the answer here.
             **[ANSWER]**: Direct answer with one-line justification.
         """).strip()
 
@@ -262,7 +272,9 @@ def batched_remediation_prompt(
             ## {topic}
             **THE RULE**: Core concept and why it works.
             **THE GUIDED SOLVE**: A fully worked example matching the subject matter.
-            **THE CHALLENGE**: A practice problem testing the concept.
+            **THE CHALLENGE**: A practice problem testing the concept, then exactly four
+            answer options labeled A) B) C) D) on their own lines, then a final line
+            "Correct: X" where X is the correct letter. Do NOT explain the answer here.
             **[ANSWER]**: Complete worked answer.
         """).strip()
         for topic in topics_batch
@@ -315,7 +327,9 @@ def weak_area_guide_prompt(subject: str, workspace: dict, missed_questions: list
         ## [Topic Name]
         **THE RULE**: ...
         **THE GUIDED SOLVE**: ...
-        **THE CHALLENGE**: ...
+        **THE CHALLENGE**: A practice problem, then exactly four answer options
+        labeled A) B) C) D) on their own lines, then a final line "Correct: X"
+        where X is the correct letter. Do NOT explain the answer here.
         **[ANSWER]**: ...
 
         Workspace materials:
@@ -419,6 +433,38 @@ def _parse_body_sections(body: str) -> dict[str, str]:
     return result
 
 
+_OPTION_RE = re.compile(
+    r"^\s*([A-D])\)\s*(.+?)\s*$", re.MULTILINE
+)
+_CORRECT_RE = re.compile(
+    r"Correct\s*:?\s*([A-D])\b", re.IGNORECASE
+)
+
+
+def _parse_challenge_mc(challenge_text: str) -> dict | None:
+    """
+    Parse a CHALLENGE block into {question, options: {A:.., B:.., ...}, correct: 'A'}.
+    Returns None if the text doesn't match the expected A)/B)/C)/D) + Correct: X shape
+    (e.g. older guides generated before this format existed) so callers can fall back
+    to plain free-text rendering.
+    """
+    options = {m.group(1).upper(): m.group(2).strip() for m in _OPTION_RE.finditer(challenge_text)}
+    correct_match = _CORRECT_RE.search(challenge_text)
+    if len(options) < 2 or not correct_match:
+        return None
+    correct = correct_match.group(1).upper()
+    if correct not in options:
+        return None
+    # Question text is everything before the first "A)" option line
+    first_option_start = min(
+        m.start() for m in _OPTION_RE.finditer(challenge_text)
+    )
+    question = challenge_text[:first_option_start].strip()
+    if not question:
+        return None
+    return {"question": question, "options": options, "correct": correct}
+
+
 def render_guide(markdown: str) -> None:
     topics = split_topics(markdown)
     if not topics:
@@ -446,18 +492,46 @@ def render_guide(markdown: str) -> None:
                 )
                 st.markdown(secs["solved_example"])
 
+            challenge_mc = None
             if secs.get("challenge"):
+                challenge_mc = _parse_challenge_mc(secs["challenge"])
                 st.divider()
-                st.markdown(
-                    "<div style='background:#FFFBEF;border:2px solid #D9A441;"
-                    "border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;'>"
-                    "<p style='font-weight:700;color:#242B18;margin:0 0 6px;'>Challenge</p>"
-                    f"<p style='color:#242B18;margin:0;'>{secs['challenge']}</p>"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
 
-            # Gated answer reveal
+                if challenge_mc:
+                    st.markdown(
+                        "<div style='background:#FFFBEF;border:2px solid #D9A441;"
+                        "border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;'>"
+                        "<p style='font-weight:700;color:#242B18;margin:0 0 6px;'>Challenge</p>"
+                        f"<p style='color:#242B18;margin:0 0 10px;'>{challenge_mc['question']}</p>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                    choice_key = f"_choice_{idx}"
+                    letters = list(challenge_mc["options"].keys())
+                    st.radio(
+                        "Choose an answer:",
+                        options=letters,
+                        format_func=lambda letter: f"{letter}) {challenge_mc['options'][letter]}",
+                        index=None,
+                        key=choice_key,
+                        label_visibility="collapsed",
+                    )
+                else:
+                    # Older guide generated before MC challenges existed — fall back
+                    # to plain text so existing saved guides don't break.
+                    st.markdown(
+                        "<div style='background:#FFFBEF;border:2px solid #D9A441;"
+                        "border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;'>"
+                        "<p style='font-weight:700;color:#242B18;margin:0 0 6px;'>Challenge</p>"
+                        f"<p style='color:#242B18;margin:0;'>{secs['challenge']}</p>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+            # Gated answer reveal — requires an attempt first when the challenge
+            # is a parsed multiple-choice question. Free-text/legacy challenges
+            # (challenge_mc is None) keep the old ungated behavior since there's
+            # nothing to "attempt" in that format.
             has_answer = (
                 topic.get("answer")
                 and topic["answer"] != "_No answer section returned._"
@@ -465,8 +539,19 @@ def render_guide(markdown: str) -> None:
             )
             if has_answer:
                 reveal_key = f"_reveal_{idx}"
+                choice_key = f"_choice_{idx}"
+                attempted = (not challenge_mc) or bool(st.session_state.get(choice_key))
+
                 if not st.session_state.get(reveal_key):
-                    if st.button(
+                    if not attempted:
+                        st.button(
+                            "Reveal Answer",
+                            key=f"_btn_reveal_{idx}",
+                            type="primary",
+                            disabled=True,
+                            help="Pick an answer above first.",
+                        )
+                    elif st.button(
                         "Reveal Answer",
                         key=f"_btn_reveal_{idx}",
                         type="primary",
@@ -474,6 +559,15 @@ def render_guide(markdown: str) -> None:
                         st.session_state[reveal_key] = True
                         st.rerun()
                 else:
+                    if challenge_mc:
+                        picked = st.session_state.get(choice_key)
+                        if picked == challenge_mc["correct"]:
+                            st.success(f"Correct! The answer is {challenge_mc['correct']}.")
+                        else:
+                            st.error(
+                                f"You picked {picked}. The correct answer is "
+                                f"{challenge_mc['correct']}."
+                            )
                     st.markdown(
                         "<p style='font-weight:700;color:#242B18;margin-bottom:4px;"
                         "margin-top:0.5rem;'>Answer</p>",
