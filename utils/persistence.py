@@ -38,6 +38,10 @@ class User(Base):
     # so preference can't drift to an extreme from repeated feedback.
     pref_verbosity  = Column(Integer, default=0, nullable=False)
     pref_examples   = Column(Integer, default=0, nullable=False)
+    edu_level       = Column(String, nullable=True)
+    edu_field       = Column(String, nullable=True)
+    study_style     = Column(String, nullable=True)
+    onboarding_done = Column(Boolean, default=False, nullable=False)
     workspaces      = relationship("Workspace", back_populates="user", cascade="all, delete-orphan")
 
 
