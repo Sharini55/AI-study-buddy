@@ -110,7 +110,7 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
             elif event == "section_done":
                 progress_state.update(done=args[0], total=args[1])
 
-        def _run() -> None:
+    def _run() -> None:
         try:
             result_holder["output"] = generate_study_guide_sot(
                 api_key, subject, workspace, mode,
@@ -123,6 +123,7 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
+        
 
     while thread.is_alive():
         with state_lock:
