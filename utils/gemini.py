@@ -173,6 +173,18 @@ def _safe_str(text: str) -> str:
         text = text.replace(char, replacement)
     return text.encode("utf-8", errors="replace").decode("utf-8")
 
+def _resolve_student_context(student_context: str | None) -> str:
+    """None -> read the current session's profile; a string -> use as given.
+
+    The None path reads st.session_state, which only works on the main script
+    thread. From a worker thread it silently returns "", so threaded callers
+    must compute the string up front and pass it in.
+    """
+    if student_context is None:
+        from utils.student_profile import build_student_context
+        student_context = build_student_context(st.session_state.get("student_profile"))
+    return _safe_str(student_context)
+
 
 def _gemini_generate(client: genai.Client, contents: list, model: str, retries: int = 4) -> str:
     """Call Gemini with exponential backoff on 429 / quota errors."""
