@@ -251,6 +251,7 @@ def generate_study_guide_sot(
     mode: str,
     progress_callback=None,
     username: str | None = None,
+    student_context: str | None = None,
 ) -> str:
     """
     Skeleton-of-Thought parallel study guide generation.
@@ -269,8 +270,16 @@ def generate_study_guide_sot(
     total_input_tokens = 0
     total_output_tokens = 0
 
-    prefs = get_user_preferences(username) if username else {}
+     prefs = get_user_preferences(username) if username else {}
     pref_note = _preference_instructions(prefs)
+
+    # Profile first, then feedback-derived preferences. Feedback is the more
+    # specific and more recent signal, so it should win a conflict.
+    parts = [p for p in (_resolve_student_context(student_context), pref_note) if p]
+    if len(parts) == 2:
+        parts.insert(1, "If the reader feedback below conflicts with the preferred "
+                        "study style above, follow the feedback.")
+    pref_note = "\n\n".join(parts)
 
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
@@ -369,6 +378,7 @@ def generate_remediation_pooled(
     missed_questions: list[dict],
     batch_size: int = _REMEDIATION_BATCH_SIZE,
     username: str | None = None,
+    student_context: str | None = None,
 ) -> str:
     """
     Dynamic Remediation Pooling.
@@ -384,6 +394,7 @@ def generate_remediation_pooled(
     from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
 
     if not missed_questions:
+        student_context = _resolve_student_context(student_context)
         return ""
 
     # --- Deduplicate topics while preserving first-seen order ----------------
@@ -416,6 +427,8 @@ def generate_remediation_pooled(
         prompt_text = _safe_str(
             batched_remediation_prompt(topics_batch, missed_per_topic, subject, workspace)
         )
+        if student_context:
+            prompt_text = f"{student_context}\n\n{prompt_text}"
         with collect_lock:
             collected_prompts.append(prompt_text)
         try:
@@ -494,6 +507,9 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
     """
     from utils.metrics import log_metric, _count_tokens, _estimate_cost
     prompt = _safe_str(prompt)
+    student_context = _resolve_student_context(student_context)
+    if student_context:
+        prompt = f"{student_context}\n\n{prompt}"
     
     # Only load heavy visual assets if explicitly requested by the calling workflow
     image_parts = workspace_image_parts(workspace) if include_images else []
