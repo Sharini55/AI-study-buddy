@@ -1176,6 +1176,15 @@ def render_settings_page(current_user: str) -> None:
     st.divider()
 
     st.markdown(
+        "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🎓 Study Profile</h3>",
+        unsafe_allow_html=True,
+    )
+    st.caption("Tailors the vocabulary, depth, and examples in your guides and quizzes.")
+    from tabs.onboarding import render_profile_settings
+    render_profile_settings(current_user)
+    st.divider()
+
+    st.markdown(
         "<h3 style='font-family:\"Truculenta\",sans-serif;color:#242B18;'>🔑 Gemini API Key</h3>",
         unsafe_allow_html=True,
     )
@@ -1435,6 +1444,13 @@ def main() -> None:
     st.session_state.setdefault("viewing_profile", False)
     st.session_state.setdefault("is_dirty", False)
     st.session_state.setdefault("gemini_api_key", "")
+
+    from utils.student_profile import load_profile_into_session
+    from tabs.onboarding import render_onboarding
+    load_profile_into_session(current_user)
+    if not st.session_state["student_profile"].get("onboarding_done"):
+        render_onboarding(current_user)
+        return
 
     if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
         loaded, loaded_guides = load_user_workspaces_from_db(current_user)
