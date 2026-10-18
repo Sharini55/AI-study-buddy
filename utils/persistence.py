@@ -156,6 +156,16 @@ def _ensure_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN pref_examples INTEGER DEFAULT 0 NOT NULL"))
             conn.commit()
 
+        for _col in ("edu_level", "edu_field", "study_style"):
+            if _col not in users_cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {_col} VARCHAR"))
+                conn.commit()
+
+        if "onboarding_done" not in users_cols:
+            _default = "0" if _DATABASE_URL.startswith("sqlite") else "FALSE"
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN onboarding_done BOOLEAN DEFAULT {_default} NOT NULL"))
+            conn.commit()
+
         if "guide_hash" not in guides_cols:
             conn.execute(text("ALTER TABLE study_guides ADD COLUMN guide_hash VARCHAR"))
             conn.commit()
