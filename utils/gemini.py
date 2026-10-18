@@ -270,7 +270,7 @@ def generate_study_guide_sot(
     total_input_tokens = 0
     total_output_tokens = 0
 
-     prefs = get_user_preferences(username) if username else {}
+    prefs = get_user_preferences(username) if username else {}
     pref_note = _preference_instructions(prefs)
 
     # Profile first, then feedback-derived preferences. Feedback is the more
@@ -280,6 +280,7 @@ def generate_study_guide_sot(
         parts.insert(1, "If the reader feedback below conflicts with the preferred "
                         "study style above, follow the feedback.")
     pref_note = "\n\n".join(parts)
+    
 
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
