@@ -100,6 +100,8 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
     state_lock = threading.Lock()
     result_holder: dict = {}
     username = st.session_state.get("username", "anonymous")
+    from utils.student_profile import build_student_context
+    student_context = build_student_context(st.session_state.get("student_profile"))
 
     def on_progress(event: str, *args) -> None:
         with state_lock:
@@ -114,6 +116,8 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
                 api_key, subject, workspace, mode,
                 progress_callback=on_progress,
                 username=username,
+                student_context=student_context,
+            )
             )
         except Exception as exc:
             result_holder["error"] = exc
