@@ -294,3 +294,34 @@ def get_user_preferences(username: str) -> dict:
         return {"verbosity": user.pref_verbosity, "examples": user.pref_examples}
     finally:
         db.close()
+
+def get_user_profile(username: str) -> dict:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return {"edu_level": None, "edu_field": None,
+                    "study_style": None, "onboarding_done": True}
+        return {"edu_level": user.edu_level, "edu_field": user.edu_field,
+                "study_style": user.study_style,
+                "onboarding_done": bool(user.onboarding_done)}
+    finally:
+        db.close()
+
+
+def save_user_profile(username: str, edu_level, edu_field, study_style,
+                      onboarding_done: bool = True) -> None:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if user:
+            user.edu_level = edu_level
+            user.edu_field = edu_field
+            user.study_style = study_style
+            user.onboarding_done = onboarding_done
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
