@@ -5,59 +5,6 @@ import streamlit as st
 
 
 # ---------------------------------------------------------------------------
-# Content-length helpers
-# ---------------------------------------------------------------------------
-
-# Below this character count the indexed notes are too sparse to work
-# from strictly.  The model will supplement with its own knowledge.
-_SPARSE_THRESHOLD = 500
-
-
-def _content_mode(workspace: dict) -> str:
-    """Return 'sparse' when indexed text is too thin, 'rich' otherwise."""
-    text = workspace.get("processed_text", "")
-    return "sparse" if len(text.strip()) < _SPARSE_THRESHOLD else "rich"
-
-
-def _strict_clause() -> str:
-    return (
-        "Create a study guide based STRICTLY on the workspace materials below. "
-        "Do not add anything not present in the materials. "
-        "Do not assume the subject domain — derive everything from the content. "
-        "Never default to code unless the materials themselves contain code."
-    )
-
-
-def _supplement_clause() -> str:
-    return (
-        "The workspace materials below are sparse (keywords or short notes only). "
-        "Use the topics and terms in the materials as your guide, then draw on your "
-        "own knowledge to fully explain each topic — definitions, examples, and context "
-        "the student would need to understand them. "
-        "Do not invent topics not hinted at in the materials, but DO fill in the "
-        "subject-matter knowledge needed to teach them properly. "
-        "Never default to code unless the materials themselves contain code."
-    )
-
-
-def _content_instruction(workspace: dict) -> str:
-    return _supplement_clause() if _content_mode(workspace) == "sparse" else _strict_clause()
-
-
-def _skeleton_content_instruction(workspace: dict) -> str:
-    if _content_mode(workspace) == "sparse":
-        return (
-            "The workspace materials below are sparse. "
-            "Extract all distinct topics/terms you can find, then infer any closely "
-            "related sub-topics that would naturally belong to this subject. "
-            "Return them as the topic list."
-        )
-    return (
-        "Identify the most important topics from the workspace materials below."
-    )
-
-
-# ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
 
@@ -107,11 +54,12 @@ def guide_prompt(subject: str, workspace: dict, mode: str, has_images: bool = Fa
             **[ANSWER]**: Direct answer with one-line justification.
         """).strip()
 
-    content_instruction = _content_instruction(workspace)
-
     return dedent(
         f"""
-        You are an expert study guide writer. {content_instruction}
+        You are an expert study guide writer. Create a study guide based STRICTLY on
+        the workspace materials below. Do not add anything not present in the materials.
+        Do not assume the subject domain — derive everything from the content.
+        Never default to code unless the materials themselves contain code.
 
         {mode_instruction}
 
@@ -130,12 +78,10 @@ def guide_prompt(subject: str, workspace: dict, mode: str, has_images: bool = Fa
 def skeleton_prompt(subject: str, workspace: dict, mode: str) -> str:
     """Stage 1 of SoT: ask the model for ONLY a JSON list of section topics."""
     n = 6 if mode == "Deep Dive" else 8
-    content_instruction = _skeleton_content_instruction(workspace)
-
     return dedent(
         f"""
         You are an expert study guide planner.
-        {content_instruction}
+        Identify the {n} most important topics from the workspace materials below.
 
         Output ONLY a JSON array of exactly {n} topic-name strings. No Markdown fences.
         No explanations. No numbering. Pure JSON only.
@@ -178,12 +124,13 @@ def section_prompt(topic: str, subject: str, workspace: dict, mode: str) -> str:
             **[ANSWER]**: Direct answer with one-line justification.
         """).strip()
 
-    content_instruction = _content_instruction(workspace)
-
     return dedent(
         f"""
         You are an expert study guide writer. Write ONLY the section for this topic: "{topic}".
-        {content_instruction}
+        Base your content STRICTLY on the workspace materials below.
+        Do not add anything not present in the materials.
+        Do not assume the subject domain -- derive everything from the content.
+        Never default to code unless the materials themselves contain code.
 
         Length: {length_rule}
 
