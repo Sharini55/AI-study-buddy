@@ -97,7 +97,7 @@ def _sparse_content_banner() -> None:
           <p style="color:#1A3A5C;font-family:'Truculenta',sans-serif;font-size:0.85rem;
                     margin:0.35rem 0 0;">
             Your notes look like keywords or short phrases without full explanations.
-            <strong>AI Study Buddy does not browse the internet</strong> — it only works
+            <strong>AI Study Buddy does not browse the internet</strong>, it only works
             from what you index. For sparse notes, it will use the topics as a guide and
             fill in explanations from its own knowledge. For the best results, upload
             notes or a textbook with full sentences and definitions.
