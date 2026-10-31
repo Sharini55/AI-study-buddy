@@ -19,10 +19,6 @@ logger = logging.getLogger(__name__)
 import os
 _SHARED_KEY = os.environ.get("SHARED_GEMINI_KEY", "")
 
-# Characters of indexed text below which we treat notes as "sparse"
-# and tell the user the model will supplement from its own knowledge.
-_SPARSE_THRESHOLD = 500
-
 
 def _get_effective_api_key() -> tuple[str, bool]:
     """
@@ -85,29 +81,6 @@ def _limit_reached_ui(kind: str) -> None:
             st.rerun()
 
 
-def _sparse_content_banner() -> None:
-    """Info banner shown when indexed notes are sparse."""
-    st.markdown(
-        """
-        <div style="background:#F0F7FF;border:1.5px solid #5B9BD5;border-radius:12px;
-                    padding:0.9rem 1.2rem;margin-bottom:0.9rem;">
-          <strong style="color:#1A3A5C;font-family:'Truculenta',sans-serif;font-size:0.9rem;">
-            📝 Sparse notes detected
-          </strong>
-          <p style="color:#1A3A5C;font-family:'Truculenta',sans-serif;font-size:0.85rem;
-                    margin:0.35rem 0 0;">
-            Your notes look like keywords or short phrases without full explanations.
-            <strong>AI Study Buddy does not browse the internet</strong>, it only works
-            from what you index. For sparse notes, it will use the topics as a guide and
-            fill in explanations from its own knowledge. For the best results, upload
-            notes or a textbook with full sentences and definitions.
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def _save_guide(subject: str, content: str, label: str = "Study Guide") -> None:
     guide_id = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
     existing_ids = {g["id"] for g in st.session_state.get("saved_guides", [])}
@@ -150,6 +123,7 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
+        
 
     while thread.is_alive():
         with state_lock:
@@ -249,11 +223,6 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
         usage = None
         guide_blocked = False
 
-    # Show sparse-content warning when notes are thin but files are present
-    processed_text = workspace.get("processed_text", "")
-    if workspace.get("files") and len(processed_text.strip()) < _SPARSE_THRESHOLD:
-        _sparse_content_banner()
-
     if guide_blocked:
         _limit_reached_ui("guide")
     elif st.button("Generate Study Guide", type="primary"):
@@ -265,16 +234,9 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
         else:
             try:
                 output = _generate_with_progress(effective_key, subject, workspace, mode)
-                if not output or not output.strip():
-                    st.error(
-                        "The guide came back empty — this can happen when the indexed notes "
-                        "are very short. Try adding more material (full sentences, definitions, "
-                        "or a textbook page) in the Ingest Material tab and generate again."
-                    )
-                else:
-                    workspace["generated_notes"] = output
-                    st.session_state["is_dirty"] = True
-                    _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
+                workspace["generated_notes"] = output
+                st.session_state["is_dirty"] = True
+                _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
                 st.error(describe_gemini_error(exc))
