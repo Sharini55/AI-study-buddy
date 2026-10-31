@@ -164,10 +164,10 @@ def describe_gemini_error(exc: Exception) -> str:
 def _safe_str(text: str) -> str:
     """Normalize unicode to avoid ASCII-codec errors downstream."""
     replacements = {
-        "\u2014": "--", "\u2013": "-",
-        "\u2018": "'",  "\u2019": "'",
-        "\u201c": '"',  "\u201d": '"',
-        "\u2026": "...", "\u00a0": " ", "\u2022": "-",
+        "—": "--", "–": "-",
+        "‘": "'",  "’": "'",
+        "“": '"',  "”": '"',
+        "…": "...", " ": " ", "•": "-",
     }
     for char, replacement in replacements.items():
         text = text.replace(char, replacement)
@@ -280,7 +280,7 @@ def generate_study_guide_sot(
         parts.insert(1, "If the reader feedback below conflicts with the preferred "
                         "study style above, follow the feedback.")
     pref_note = "\n\n".join(parts)
-    
+
 
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
@@ -502,19 +502,22 @@ def generate_remediation_pooled(
 
 def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = "gemini_call", include_images: bool = False, username: str | None = None) -> str:
     """Call Gemini and log TTV + token-efficiency metrics.
-    
-    Optimized: include_images is False by default to prevent large visual payloads 
+
+    Optimized: include_images is False by default to prevent large visual payloads
     from causing high network latency during text-only generation workflows (like Quizzes).
     """
     from utils.metrics import log_metric, _count_tokens, _estimate_cost
     prompt = _safe_str(prompt)
-    student_context = _resolve_student_context(student_context)
-    if student_context:
-        prompt = f"{student_context}\n\n{prompt}"
-    
+    # Resolve student context from the main thread's session state.
+    # call_gemini runs on the main thread (unlike SoT worker threads),
+    # so reading session_state here is safe.
+    resolved_context = _resolve_student_context(None)
+    if resolved_context:
+        prompt = f"{resolved_context}\n\n{prompt}"
+
     # Only load heavy visual assets if explicitly requested by the calling workflow
     image_parts = workspace_image_parts(workspace) if include_images else []
-    
+
     t0 = time.perf_counter()
     client = get_gemini_client(api_key)
     model = resolve_model(api_key)
