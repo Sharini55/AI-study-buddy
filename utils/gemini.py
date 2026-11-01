@@ -10,6 +10,16 @@ from google.genai import types
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
+# Without a timeout a stalled connection waits forever, and the UI just sits on
+# its spinner or progress bar. 90s covers the slowest legitimate call (a long
+# guide section or a 20-question quiz) with room to spare.
+_REQUEST_TIMEOUT_MS = 90_000
+
+# Longest we will sleep between retries. If Google asks for a longer wait than
+# this (typically "retry in 40s" on a per-minute limit), retrying here is
+# pointless, so we stop and tell the user instead of freezing the page.
+_MAX_RETRY_WAIT_S = 15
+
 
 @st.cache_resource
 def get_gemini_client(api_key: str) -> genai.Client:
@@ -17,7 +27,10 @@ def get_gemini_client(api_key: str) -> genai.Client:
     The api_key argument is part of the cache key, so a new client
     is automatically created whenever the key changes.
     """
-    return genai.Client(api_key=api_key.strip())
+    return genai.Client(
+        api_key=api_key.strip(),
+        http_options=types.HttpOptions(timeout=_REQUEST_TIMEOUT_MS),
+    )
 
 
 # Preference order — first candidate the key actually has access to wins.
@@ -128,6 +141,12 @@ def describe_gemini_error(exc: Exception) -> str:
             "billing/API access isn't enabled for the Google Cloud project the key "
             "belongs to, or the key doesn't have access to this model."
         )
+    if _is_daily_quota(msg):
+        return (
+            "⏳ The free daily Gemini quota for this key has run out. It resets "
+            "once a day. Paste your own free Gemini key in **Settings** to keep "
+            "going now, or try again tomorrow."
+        )
     if "resource_exhausted" in lower or "quota" in lower or re.search(r"\b429\b", msg):
         return (
             "⏳ You've hit Gemini's rate limit or quota for this key (HTTP 429). "
@@ -187,8 +206,26 @@ def _resolve_student_context(student_context: str | None) -> str:
     return _safe_str(student_context)
 
 
-def _gemini_generate(client: genai.Client, contents: list, model: str, retries: int = 4) -> str:
-    """Call Gemini with exponential backoff on 429 / quota errors."""
+def _is_daily_quota(err: str) -> bool:
+    """True when Gemini's 429 says the DAILY quota is spent.
+
+    Google names the violated quota in the error (e.g. quotaId
+    "GenerateRequestsPerDayPerProjectPerModel-FreeTier"). Retrying a daily
+    limit can never succeed until it resets, so callers must not wait on it.
+    """
+    low = err.lower()
+    limited = "429" in err or "resource_exhausted" in low or "quota" in low
+    return limited and ("perday" in low or "per day" in low)
+
+
+def _gemini_generate(client: genai.Client, contents: list, model: str, retries: int = 3) -> str:
+    """Call Gemini, retrying briefly on per-minute 429s and failing fast otherwise.
+
+    Fails immediately (no sleeping) on: daily quota exhaustion, a requested wait
+    longer than _MAX_RETRY_WAIT_S, timeouts, and every non-quota error. Worst
+    case this now takes about one request timeout plus two short sleeps, instead
+    of freezing the page.
+    """
     for attempt in range(retries):
         try:
             response = client.models.generate_content(
@@ -198,14 +235,14 @@ def _gemini_generate(client: genai.Client, contents: list, model: str, retries: 
             return _safe_str(response.text or "")
         except Exception as exc:
             err = str(exc)
+            is_quota = "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower()
+            if not is_quota or _is_daily_quota(err) or attempt == retries - 1:
+                raise
             delay_match = re.search(r"retry[^\d]*(\d+)s", err, re.I)
             suggested = int(delay_match.group(1)) if delay_match else 0
-            wait = max(suggested, 2 ** attempt)
-            is_quota = "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower()
-            if is_quota and attempt < retries - 1:
-                time.sleep(wait)
-                continue
-            raise
+            if suggested > _MAX_RETRY_WAIT_S:
+                raise
+            time.sleep(max(suggested, 2 ** attempt))
 
 
 def workspace_image_parts(workspace: dict) -> list[types.Part]:
