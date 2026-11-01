@@ -401,13 +401,6 @@ def index_materials(uploaded_files, pasted_text: str, workspace: dict, subject: 
     # workspace_id is needed for chunk foreign keys; fall back gracefully if absent.
     workspace_id: str = workspace.get("id", "")
 
-    image_uploads = [
-        item for item in uploaded_files or []
-        if item.name.rsplit(".", 1)[-1].lower() in {"jpg", "jpeg", "png"}
-    ]
-    if image_uploads and not api_key:
-        st.warning("⚙ A Gemini API key is required to analyze image slides.")
-
     for uploaded_file in uploaded_files or []:
         file_item, unit_count, file_warnings = parse_uploaded_file(uploaded_file, api_key)
         warnings.extend(file_warnings)
