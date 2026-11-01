@@ -173,6 +173,7 @@ def _safe_str(text: str) -> str:
         text = text.replace(char, replacement)
     return text.encode("utf-8", errors="replace").decode("utf-8")
 
+
 def _resolve_student_context(student_context: str | None) -> str:
     """None -> read the current session's profile; a string -> use as given.
 
@@ -280,7 +281,6 @@ def generate_study_guide_sot(
         parts.insert(1, "If the reader feedback below conflicts with the preferred "
                         "study style above, follow the feedback.")
     pref_note = "\n\n".join(parts)
-    
 
     # ------------------------------------------------------------------ Stage 1
     skel_text = _safe_str(skeleton_prompt(subject, workspace, mode))
@@ -395,8 +395,10 @@ def generate_remediation_pooled(
     from utils.metrics import log_metric, _count_tokens, _estimate_cost, report_generation_metrics
 
     if not missed_questions:
-        student_context = _resolve_student_context(student_context)
         return ""
+
+    # Resolved here, on the calling (main) thread, before any worker threads start.
+    student_context = _resolve_student_context(student_context)
 
     # --- Deduplicate topics while preserving first-seen order ----------------
     missed_per_topic: dict[str, list[str]] = {}
@@ -500,10 +502,18 @@ def generate_remediation_pooled(
     return assembled
 
 
-def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = "gemini_call", include_images: bool = False, username: str | None = None) -> str:
+def call_gemini(
+    api_key: str,
+    prompt: str,
+    workspace: dict,
+    metric_label: str = "gemini_call",
+    include_images: bool = False,
+    username: str | None = None,
+    student_context: str | None = None,
+) -> str:
     """Call Gemini and log TTV + token-efficiency metrics.
-    
-    Optimized: include_images is False by default to prevent large visual payloads 
+
+    Optimized: include_images is False by default to prevent large visual payloads
     from causing high network latency during text-only generation workflows (like Quizzes).
     """
     from utils.metrics import log_metric, _count_tokens, _estimate_cost
@@ -511,10 +521,10 @@ def call_gemini(api_key: str, prompt: str, workspace: dict, metric_label: str = 
     student_context = _resolve_student_context(student_context)
     if student_context:
         prompt = f"{student_context}\n\n{prompt}"
-    
+
     # Only load heavy visual assets if explicitly requested by the calling workflow
     image_parts = workspace_image_parts(workspace) if include_images else []
-    
+
     t0 = time.perf_counter()
     client = get_gemini_client(api_key)
     model = resolve_model(api_key)
