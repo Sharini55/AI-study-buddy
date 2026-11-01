@@ -10,6 +10,14 @@ def workspace_summary(workspace: dict) -> None:
     col3.metric("Sources",        len(workspace["files"]))
 
 
+def _run_quality_check(workspace: dict, subject: str) -> None:
+    """Run the content quality check and store the result in session state."""
+    from utils.content_quality import check_content_quality
+    is_usable, reason = check_content_quality(workspace)
+    st.session_state[f"_content_usable_{subject}"] = is_usable
+    st.session_state[f"_content_reason_{subject}"] = reason
+
+
 def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
     from utils.files import index_materials, blank_workspace
 
@@ -70,6 +78,10 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                     "size_bytes": len(pasted_text.encode("utf-8")),
                 })
 
+            # Run quality check immediately after indexing so the flag is set
+            # before the next-step nav buttons render.
+            _run_quality_check(workspace, subject)
+
             # Just set a flag here — don't render the nav buttons inside this
             # block. st.button() only returns True on the single rerun where
             # it was clicked, so on the rerun triggered by clicking one of the
@@ -84,13 +96,44 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         if st.button("🗑 Reset Workspace", use_container_width=True):
             st.session_state[f"_confirm_reset_{subject}"] = True
             st.session_state[f"_just_indexed_{subject}"] = False
+            # Clear quality flags on reset
+            st.session_state.pop(f"_content_usable_{subject}", None)
+            st.session_state.pop(f"_content_reason_{subject}", None)
+
+    # ── Content quality warning ──────────────────────────────────────────────
+    # Shown whenever the workspace has files but the quality check failed.
+    # This persists across reruns because it reads from session_state flags
+    # set by _run_quality_check() above.
+    content_usable = st.session_state.get(f"_content_usable_{subject}", True)
+    content_reason = st.session_state.get(f"_content_reason_{subject}", "")
+
+    if workspace.get("files") and not content_usable and content_reason:
+        st.markdown(
+            f"""
+            <div style="background:#FFF8F0;border:2px solid #D9A441;border-radius:14px;
+                        padding:1rem 1.25rem;margin:0.75rem 0;">
+              <strong style="color:#7A4E00;font-family:'Truculenta',sans-serif;font-size:0.95rem;">
+                ⚠️ Notes need more detail to generate from
+              </strong>
+              <p style="color:#5C3B00;font-family:'Truculenta',sans-serif;font-size:0.88rem;
+                        margin:0.4rem 0 0;white-space:pre-line;">
+                {content_reason}
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ── Next-step guidance with navigation buttons ──────────────────────────
     # Lives OUTSIDE the "Index Materials" button's if-block on purpose (see
     # comment above) so each nav button's own click can actually be handled
     # on the rerun it triggers, instead of the whole section just disappearing.
     if st.session_state.get(f"_just_indexed_{subject}"):
-        st.success("Materials indexed! What would you like to do next?")
+        if content_usable:
+            st.success("Materials indexed! What would you like to do next?")
+        else:
+            st.info("Materials indexed — add more detailed notes to unlock Study Guide, Quiz, and Adaptive Study.")
+
         btn1, btn2, btn3 = st.columns(3)
         with btn1:
             if st.button(
@@ -98,6 +141,8 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 use_container_width=True,
                 type="primary",
                 key="ingest_goto_guide",
+                disabled=not content_usable,
+                help=None if content_usable else "Add more detailed notes first — see the warning above.",
             ):
                 st.session_state["current_page"] = "Study guide"
                 st.session_state[f"_just_indexed_{subject}"] = False
@@ -108,6 +153,8 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 use_container_width=True,
                 type="primary",
                 key="ingest_goto_quiz",
+                disabled=not content_usable,
+                help=None if content_usable else "Add more detailed notes first — see the warning above.",
             ):
                 st.session_state["current_page"] = "Quiz"
                 st.session_state[f"_just_indexed_{subject}"] = False
@@ -117,6 +164,8 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 "🎯 Adaptive Study",
                 use_container_width=True,
                 key="ingest_goto_adaptive",
+                disabled=not content_usable,
+                help=None if content_usable else "Add more detailed notes first — see the warning above.",
             ):
                 st.session_state["current_page"] = "Adaptive Study"
                 st.session_state[f"_just_indexed_{subject}"] = False
@@ -142,6 +191,8 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 workspace.update(fresh)
                 st.session_state.pop(f"_confirm_reset_{subject}", None)
                 st.session_state[f"_just_indexed_{subject}"] = False
+                st.session_state.pop(f"_content_usable_{subject}", None)
+                st.session_state.pop(f"_content_reason_{subject}", None)
                 st.toast(f"Workspace '{subject}' has been reset.", icon="🗑")
                 st.rerun()
         with no_col:
