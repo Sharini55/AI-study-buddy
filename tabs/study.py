@@ -81,6 +81,37 @@ def _limit_reached_ui(kind: str) -> None:
             st.rerun()
 
 
+def _sparse_content_banner(reason: str) -> None:
+    """
+    Hard-block banner shown when indexed content is too sparse or keyword-only.
+    Directs the user back to ingest more material.
+    """
+    # Escape any HTML special chars in the reason string before embedding
+    import html as _html
+    safe_reason = _html.escape(reason).replace("\n\n", "<br><br>").replace("\n", "<br>")
+
+    st.markdown(
+        f"""
+        <div style="background:#FFF8F0;border:2px solid #D9A441;border-radius:14px;
+                    padding:1.25rem 1.5rem;margin-bottom:1rem;">
+          <strong style="color:#7A4E00;font-family:'Truculenta',sans-serif;font-size:1rem;">
+            ⚠️ Not enough material to generate from
+          </strong>
+          <p style="color:#5C3B00;font-family:'Truculenta',sans-serif;font-size:0.9rem;
+                    margin:0.5rem 0 0;">
+            {safe_reason}
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    col1, _ = st.columns([2, 5])
+    with col1:
+        if st.button("← Go add more notes", type="primary", key="sparse_goto_ingest_study"):
+            st.session_state["current_page"] = "Dashboard"
+            st.rerun()
+
+
 def _save_guide(subject: str, content: str, label: str = "Study Guide") -> None:
     guide_id = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
     existing_ids = {g["id"] for g in st.session_state.get("saved_guides", [])}
@@ -123,7 +154,6 @@ def _generate_with_progress(api_key: str, subject: str, workspace: dict, mode: s
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-        
 
     while thread.is_alive():
         with state_lock:
@@ -209,10 +239,22 @@ def _render_feedback_banner(username: str, guide_hash: str) -> None:
 def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: str) -> None:
     """api_key_unused kept for signature compatibility — we resolve the key here."""
     from utils.metrics import get_daily_usage
+    from utils.content_quality import check_content_quality
 
     wid = workspace.get("id", subject)
     effective_key, using_own_key = _get_effective_api_key()
     username = st.session_state.get("username", "anonymous")
+
+    # ── Content quality gate ─────────────────────────────────────────────────
+    # Re-use the cached result from ingest if available; otherwise recompute.
+    # This means we never re-run the check on every rerun — only after indexing.
+    if f"_content_usable_{subject}" in st.session_state:
+        content_usable = st.session_state[f"_content_usable_{subject}"]
+        content_reason = st.session_state.get(f"_content_reason_{subject}", "")
+    else:
+        content_usable, content_reason = check_content_quality(workspace)
+        st.session_state[f"_content_usable_{subject}"] = content_usable
+        st.session_state[f"_content_reason_{subject}"] = content_reason
 
     # Only count/show quota when the user is on the shared key
     if not using_own_key:
@@ -225,18 +267,33 @@ def render_study_tab(api_key_unused: str, subject: str, workspace: dict, mode: s
 
     if guide_blocked:
         _limit_reached_ui("guide")
+    elif not content_usable:
+        # Hard block — show banner and a disabled button so the user sees why
+        _sparse_content_banner(content_reason)
+        st.button(
+            "Generate Study Guide",
+            type="primary",
+            disabled=True,
+            help="Add more detailed notes in the Ingest Material tab first.",
+        )
     elif st.button("Generate Study Guide", type="primary"):
         if not effective_key:
-            # No shared key configured and no own key — shouldn't normally happen
             st.warning("No API key available. Go to Settings and paste your free Gemini key.")
         elif not workspace["files"]:
             st.warning("Add material in the Ingest Material tab first.")
         else:
             try:
                 output = _generate_with_progress(effective_key, subject, workspace, mode)
-                workspace["generated_notes"] = output
-                st.session_state["is_dirty"] = True
-                _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
+                if not output or not output.strip():
+                    st.error(
+                        "The guide came back empty — this can happen when the indexed notes "
+                        "are very short. Try adding more material (full sentences, definitions, "
+                        "or a textbook page) in the Ingest Material tab and generate again."
+                    )
+                else:
+                    workspace["generated_notes"] = output
+                    st.session_state["is_dirty"] = True
+                    _save_guide(subject, workspace["generated_notes"], f"{mode} Guide")
             except Exception as exc:
                 logger.error("Study guide generation failed: %s", exc, exc_info=True)
                 st.error(describe_gemini_error(exc))
