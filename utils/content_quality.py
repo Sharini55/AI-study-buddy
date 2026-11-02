@@ -10,6 +10,11 @@ Two failure modes are detected:
      "biology keywords without definitions" pattern that caused the model
      to hallucinate earlier.
 
+NOTE: Slide-PDF extraction breaks single sentences across multiple short
+lines (e.g. "Introduce the four" / "main software" / "process activities.").
+We rejoin those fragments before measuring the ratio so slide decks are
+not incorrectly flagged as keyword lists.
+
 Public API
 ----------
 check_content_quality(workspace) -> (is_usable: bool, reason: str)
@@ -18,6 +23,7 @@ check_content_quality(workspace) -> (is_usable: bool, reason: str)
 """
 
 from __future__ import annotations
+import re
 
 # Minimum total characters of indexed text required.
 MIN_CHARS = 400
@@ -26,11 +32,51 @@ MIN_CHARS = 400
 SENTENCE_MIN_WORDS = 6
 
 # If more than this fraction of non-blank lines are short (< SENTENCE_MIN_WORDS
-# words), we flag the content as a keyword list.
-MAX_SHORT_LINE_RATIO = 0.72
+# words) AFTER rejoining wrapped fragments, we flag as a keyword list.
+# Raised from 0.72 → 0.85 because slide decks with real content still
+# have plenty of short header/label lines even after joining.
+MAX_SHORT_LINE_RATIO = 0.85
 
 # We need at least this many non-blank lines to make the ratio meaningful.
 MIN_LINES_FOR_RATIO_CHECK = 8
+
+
+def _rejoin_wrapped_lines(lines: list[str]) -> list[str]:
+    """
+    Slide PDFs extracted with PyMuPDF often break a single bullet or sentence
+    across several lines, e.g.:
+        "Introduce the four"
+        "main software"
+        "process activities."
+    Merge consecutive non-blank lines when the previous line does not end a
+    sentence and the current line does not start a new bullet/list item.
+    Blank lines (paragraph separators) always flush the buffer.
+    """
+    merged: list[str] = []
+    buffer = ""
+
+    for line in lines:
+        if not line:
+            if buffer:
+                merged.append(buffer)
+                buffer = ""
+            merged.append("")
+            continue
+
+        starts_new_item = bool(re.match(r'^[\•\-\*•–\d]+[\.\):\s]', line))
+        prev_ends_sentence = buffer and buffer[-1] in ".!?:"
+
+        if buffer and not starts_new_item and not prev_ends_sentence:
+            buffer = buffer + " " + line
+        else:
+            if buffer:
+                merged.append(buffer)
+            buffer = line
+
+    if buffer:
+        merged.append(buffer)
+
+    return merged
 
 
 def check_content_quality(workspace: dict) -> tuple[bool, str]:
@@ -59,8 +105,11 @@ def check_content_quality(workspace: dict) -> tuple[bool, str]:
         )
 
     # ── Check 2: keyword-list detection ──────────────────────────────────────
-    lines = [ln.strip() for ln in text.splitlines()]
-    non_blank = [ln for ln in lines if ln]
+    # Rejoin slide-PDF line fragments before measuring so real content in
+    # slide decks isn't incorrectly flagged.
+    raw_lines = [ln.strip() for ln in text.splitlines()]
+    joined_lines = _rejoin_wrapped_lines(raw_lines)
+    non_blank = [ln for ln in joined_lines if ln]
 
     if len(non_blank) >= MIN_LINES_FOR_RATIO_CHECK:
         short_lines = [ln for ln in non_blank if len(ln.split()) < SENTENCE_MIN_WORDS]
