@@ -8,7 +8,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # Without a timeout a stalled connection waits forever, and the UI just sits on
 # its spinner or progress bar. 90s covers the slowest legitimate call (a long
@@ -34,13 +34,14 @@ def get_gemini_client(api_key: str) -> genai.Client:
 
 
 # Preference order — first candidate the key actually has access to wins.
+# gemini-2.0-flash is first: 1,500 req/day free vs gemini-2.5-flash's 20 req/day.
 _MODEL_CANDIDATES = [
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash-lite",
-    "gemini-3-flash",
     "gemini-2.0-flash",
     "gemini-2.0-flash-001",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-3-flash",
 ]
 
 
