@@ -740,6 +740,7 @@ def apply_theme() -> None:
                 'Quiz':           'ti-help-circle',
                 'Adaptive Study': 'ti-target-arrow',
                 'Saved Guides':   'ti-bookmark',
+                'How to Use':     'ti-info-circle',
             };
 
             function initSidebar() {
@@ -1015,7 +1016,7 @@ def render_workspace_sidebar(username: str, is_admin: bool = False) -> tuple[str
 
         _sb_section("Navigation")
         current_page = st.session_state.get("current_page", "Dashboard")
-        nav_pages = ["Dashboard", "Study guide", "Quiz", "Adaptive Study", "Saved Guides"]
+        nav_pages = ["Dashboard", "Study guide", "Quiz", "Adaptive Study", "Saved Guides", "How to Use"]
         for page in nav_pages:
             is_active = current_page == page
             btn_type = "primary" if is_active else "secondary"
@@ -1444,12 +1445,22 @@ def main() -> None:
     st.session_state.setdefault("viewing_profile", False)
     st.session_state.setdefault("is_dirty", False)
     st.session_state.setdefault("gemini_api_key", "")
+    st.session_state.setdefault("tutorial_seen", False)
 
     from utils.student_profile import load_profile_into_session
     from tabs.onboarding import render_onboarding
     load_profile_into_session(current_user)
     if not st.session_state["student_profile"].get("onboarding_done"):
         render_onboarding(current_user)
+        return
+
+    # Show the tutorial popup once to new users (after onboarding, before anything else)
+    if not st.session_state["tutorial_seen"]:
+        from tabs.instructions import render_instructions_tab
+        render_instructions_tab()
+        if st.button("✓ Got it, let's start!", key="_tut_start_btn", type="primary"):
+            st.session_state["tutorial_seen"] = True
+            st.rerun()
         return
 
     if "workspaces" not in st.session_state or not st.session_state["workspaces"]:
@@ -1492,7 +1503,10 @@ def main() -> None:
     from tabs.quiz import render_quiz_tab
     from tabs.adaptive_study import render_adaptive_study_tab
 
-    if current_page == "Saved Guides":
+    if current_page == "How to Use":
+        from tabs.instructions import render_instructions_tab
+        render_instructions_tab()
+    elif current_page == "Saved Guides":
         render_saved_guides_page()
     elif current_page == "Dashboard":
         st.markdown(
