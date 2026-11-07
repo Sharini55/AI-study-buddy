@@ -8,7 +8,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 # Without a timeout a stalled connection waits forever, and the UI just sits on
 # its spinner or progress bar. 90s covers the slowest legitimate call (a long
@@ -34,14 +34,16 @@ def get_gemini_client(api_key: str) -> genai.Client:
 
 
 # Preference order — first candidate the key actually has access to wins.
-# gemini-2.0-flash is first: 1,500 req/day free vs gemini-2.5-flash's 20 req/day.
+# gemini-2.0-flash and gemini-2.0-flash-001 were retired June 1 2026.
+# gemini-3.5-flash (GA May 2026) is the current high-quota free-tier model.
+# gemini-3.1-flash-lite is the lightweight backup.
 _MODEL_CANDIDATES = [
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-001",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",        # alias that always points to current GA flash
+    "gemini-3.1-flash-lite",
+    "gemini-3.6-flash",           # Google's listed replacement for 2.0-flash
+    "gemini-2.5-flash",           # still no announced shutdown as of Nov 2026
     "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-3-flash",
 ]
 
 
@@ -156,8 +158,9 @@ def describe_gemini_error(exc: Exception) -> str:
         )
     if "not_found" in lower or re.search(r"\b404\b", msg):
         return (
-            f"❌ Gemini couldn't find the model `{GEMINI_MODEL}`. This can happen if "
-            "the model name was retired or isn't available for your key's region/tier."
+            "❌ Gemini couldn't find this model. This can happen if the model name "
+            "was retired or isn't available for your key's region/tier. "
+            "The app will try the next available model automatically — please try again."
         )
     if "unauthenticated" in lower or re.search(r"\b401\b", msg):
         return (
