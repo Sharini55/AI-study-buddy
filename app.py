@@ -479,12 +479,47 @@ def apply_theme() -> None:
             border-radius: 14px !important;
             font-family: 'Truculenta', sans-serif !important;
         }
-        div[data-testid="stAlert"],
-        div[data-testid="stAlert"] p,
-        div[data-testid="stAlert"] span,
-        div[data-testid="stAlert"] li,
-        div[data-testid="stAlert"] a,
-        div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] {
+
+        /* Success (green) and error (red) banners have dark backgrounds —
+           force white text so it's readable. */
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="positive"],
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="negative"],
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="info"] {
+            color: #FFFFFF !important;
+        }
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="positive"] *,
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="negative"] *,
+        div[data-testid="stAlert"][data-baseweb="notification"][kind="info"] * {
+            color: #FFFFFF !important;
+        }
+
+        /* Streamlit uses data-testid="stNotification" on newer versions */
+        div[data-testid="stNotification"][kind="success"],
+        div[data-testid="stNotification"][kind="success"] *,
+        div[data-testid="stNotification"][kind="error"],
+        div[data-testid="stNotification"][kind="error"] *,
+        div[data-testid="stNotification"][kind="info"],
+        div[data-testid="stNotification"][kind="info"] * {
+            color: #FFFFFF !important;
+        }
+
+        /* Fallback: target by background color class patterns Streamlit injects.
+           st.success → class contains "st-emotion-cache" with green bg
+           st.error   → dark red bg
+           st.info    → dark blue bg
+           st.warning → light yellow bg (keep dark ink here) */
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-success"]),
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-success"]) *,
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-error"]),
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-error"]) *,
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-info"]),
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-info"]) * {
+            color: #FFFFFF !important;
+        }
+
+        /* Warning banners have a light background — keep dark text */
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-warning"]),
+        div[data-testid="stAlert"]:has(svg[data-testid="stAlertDynamicIcon-warning"]) * {
             color: var(--ink) !important;
         }
 
