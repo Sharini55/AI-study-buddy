@@ -61,7 +61,24 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
             from utils.analytics import capture
             username   = st.session_state.get("username", "anonymous")
             prev_count = len(workspace.get("files", []))
-            index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
+
+            # Images require a Gemini OCR call per file — show a spinner so
+            # the UI doesn't appear frozen during the API call(s).
+            image_files = [
+                f for f in (uploaded_files or [])
+                if f.name.rsplit(".", 1)[-1].lower() in {"jpg", "jpeg", "png"}
+            ]
+            if image_files:
+                n = len(image_files)
+                label = (
+                    f"Reading {image_files[0].name}…"
+                    if n == 1
+                    else f"Analyzing {n} images with Gemini — this takes ~10–20 s per photo…"
+                )
+                with st.spinner(label):
+                    index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
+            else:
+                index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
             new_files = workspace.get("files", [])[prev_count:]
             for f in new_files:
                 capture("document_uploaded", username, {
@@ -208,3 +225,50 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
 
     for warning in sorted(set(workspace.get("visual_warnings", []))):
         st.warning(warning)
+
+    # ── Indexed sources list ─────────────────────────────────────────────────
+    # Shows every file currently in the workspace so users know exactly what's
+    # indexed. Each source can be removed individually without resetting everything.
+    files = workspace.get("files", [])
+    if files:
+        st.markdown(
+            "<div style='margin-top:1.2rem;margin-bottom:0.3rem;"
+            "font-size:0.68rem;font-weight:700;color:#5C6A48;"
+            "letter-spacing:1.6px;text-transform:uppercase;"
+            "font-family:Truculenta,sans-serif;'>Indexed sources</div>",
+            unsafe_allow_html=True,
+        )
+        for i, file_item in enumerate(list(files)):  # copy so removal during iteration is safe
+            fname = file_item.get("name", "Unknown")
+            ftype = file_item.get("type", "").upper()
+            fsize = file_item.get("size", 0)
+            size_str = f"{fsize / 1024:.0f} KB" if fsize < 1_048_576 else f"{fsize / 1_048_576:.1f} MB"
+            icon = {
+                "pdf": "📄", "pptx": "📊", "png": "🖼", "jpg": "🖼", "jpeg": "🖼",
+                "text_paste": "📝",
+            }.get(file_item.get("type", ""), "📎")
+
+            col_name, col_remove = st.columns([9, 1])
+            with col_name:
+                st.markdown(
+                    f"<div style='padding:6px 10px;border-radius:8px;"
+                    f"border:1px solid #C5D99A;background:#FFFFFF;"
+                    f"font-family:Truculenta,sans-serif;font-size:0.85rem;"
+                    f"color:#242B18;display:flex;align-items:center;gap:8px;'>"
+                    f"{icon} <strong>{fname}</strong>"
+                    f"<span style='color:#5C6A48;font-size:0.78rem;margin-left:auto;'>{ftype} · {size_str}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            with col_remove:
+                if st.button("✕", key=f"_rm_src_{subject}_{i}", help=f"Remove {fname}"):
+                    workspace["files"] = [f for f in workspace["files"] if f.get("id") != file_item.get("id")]
+                    from utils.files import refresh_processed_text
+                    refresh_processed_text(workspace)
+                    st.session_state["is_dirty"] = True
+                    # Clear quality flags so they re-evaluate on next index
+                    st.session_state.pop(f"_content_usable_{subject}", None)
+                    st.session_state.pop(f"_content_reason_{subject}", None)
+                    st.session_state.pop(f"_just_indexed_{subject}", None)
+                    st.toast(f"Removed {fname}")
+                    st.rerun()
