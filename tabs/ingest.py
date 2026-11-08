@@ -73,7 +73,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 label = (
                     f"Reading {image_files[0].name}…"
                     if n == 1
-                    else f"Analyzing {n} images with Gemini — this takes ~10–20 s per photo…"
+                    else f"Analyzing {n} images with Gemini; this takes ~10-20 s per photo…"
                 )
                 with st.spinner(label):
                     index_materials(uploaded_files, pasted_text, workspace, subject, api_key)
@@ -149,7 +149,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
         if content_usable:
             st.success("Materials indexed! What would you like to do next?")
         else:
-            st.info("Materials indexed — add more detailed notes to unlock Study Guide, Quiz, and Adaptive Study.")
+            st.info("Materials indexed; add more detailed notes to unlock Study Guide, Quiz, and Adaptive Study.")
 
         btn1, btn2, btn3 = st.columns(3)
         with btn1:
@@ -159,7 +159,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 type="primary",
                 key="ingest_goto_guide",
                 disabled=not content_usable,
-                help=None if content_usable else "Add more detailed notes first — see the warning above.",
+                help=None if content_usable else "Add more detailed notes first; see the warning above.",
             ):
                 st.session_state["current_page"] = "Study guide"
                 st.session_state[f"_just_indexed_{subject}"] = False
@@ -171,7 +171,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 type="primary",
                 key="ingest_goto_quiz",
                 disabled=not content_usable,
-                help=None if content_usable else "Add more detailed notes first — see the warning above.",
+                help=None if content_usable else "Add more detailed notes first; see the warning above.",
             ):
                 st.session_state["current_page"] = "Quiz"
                 st.session_state[f"_just_indexed_{subject}"] = False
@@ -182,7 +182,7 @@ def render_ingest_tab(subject: str, workspace: dict, api_key: str) -> None:
                 use_container_width=True,
                 key="ingest_goto_adaptive",
                 disabled=not content_usable,
-                help=None if content_usable else "Add more detailed notes first — see the warning above.",
+                help=None if content_usable else "Add more detailed notes first; see the warning above.",
             ):
                 st.session_state["current_page"] = "Adaptive Study"
                 st.session_state[f"_just_indexed_{subject}"] = False
