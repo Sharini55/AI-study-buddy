@@ -98,8 +98,8 @@ def check_content_quality(workspace: dict) -> tuple[bool, str]:
             )
         return False, (
             f"Your indexed notes are too short ({len(text)} characters). "
-            "AI Study Buddy works purely from the notes you provide — it does not "
-            "browse the internet — so it needs enough material to generate from. "
+            "AI Study Buddy works purely from the notes you provide; it does not "
+            "browse the internet, so it needs enough material to generate from. "
             "Please add more text: full sentences, definitions, or a textbook "
             "passage work best."
         )
@@ -119,8 +119,8 @@ def check_content_quality(workspace: dict) -> tuple[bool, str]:
             return False, (
                 "Your notes look like a list of keywords or very short phrases "
                 f"({int(ratio * 100)}% of lines have fewer than {SENTENCE_MIN_WORDS} words). "
-                "AI Study Buddy does not use the internet — it generates entirely from "
-                "what you index — so keyword lists without definitions or explanations "
+                "AI Study Buddy does not use the internet; it generates entirely from "
+                "what you index, so keyword lists without definitions or explanations "
                 "aren't enough to produce a reliable study guide or quiz.\n\n"
                 "**What to add:** paste notes with full sentences, definitions, "
                 "or upload a PDF/PPTX with actual explanations. Even a few paragraphs "
